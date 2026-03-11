@@ -418,6 +418,220 @@ ignore_patterns:
     console.print("  4. Run [cyan]coderag query <search>[/cyan] to search the graph")
 
 
+
+# ── analyze ────────────────────────────────────────────────────
+
+@cli.command()
+@click.argument("symbol")
+@click.option(
+    "--depth", "-d", default=3, show_default=True,
+    help="Maximum blast radius depth.",
+)
+@click.option(
+    "--budget", "-b", default=4000, show_default=True,
+    help="Token budget for context assembly.",
+)
+@click.option(
+    "--format", "fmt", type=click.Choice(["markdown", "json"]), default="markdown",
+    help="Output format.",
+)
+@click.pass_context
+def analyze(ctx: click.Context, symbol: str, depth: int, budget: int, fmt: str) -> None:
+    """Analyze a symbol's blast radius and impact.
+
+    Shows which nodes are affected if the given symbol changes,
+    organized by depth level.
+    """
+    from coderag.analysis.networkx_analyzer import NetworkXAnalyzer
+    from coderag.output.context import ContextAssembler
+
+    config = _load_config(ctx.obj["config_path"])
+    if ctx.obj["db_override"]:
+        config.db_path = ctx.obj["db_override"]
+
+    store = _open_store(config)
+
+    try:
+        # Load graph into analyzer
+        with console.status("[bold cyan]Loading graph into analyzer..."):
+            analyzer = NetworkXAnalyzer()
+            analyzer.load_from_store(store)
+
+        console.print(
+            f"[green]✓[/green] Graph loaded: "
+            f"[bold]{analyzer.node_count:,}[/bold] nodes, "
+            f"[bold]{analyzer.edge_count:,}[/bold] edges"
+        )
+        console.print()
+
+        if fmt == "json":
+            # Find node
+            node = store.get_node_by_qualified_name(symbol)
+            if not node:
+                results = store.search_nodes(symbol, limit=1)
+                node = results[0] if results else None
+
+            if not node:
+                console.print(f"[red]Symbol not found:[/red] {symbol}")
+                return
+
+            blast = analyzer.blast_radius(node.id, max_depth=depth)
+            data = {
+                "symbol": node.qualified_name,
+                "kind": node.kind.value if isinstance(node.kind, NodeKind) else node.kind,
+                "file": node.file_path,
+                "blast_radius": {},
+            }
+            for d, node_ids in blast.items():
+                data["blast_radius"][str(d)] = []
+                for nid in node_ids:
+                    n = store.get_node(nid)
+                    if n:
+                        data["blast_radius"][str(d)].append({
+                            "id": n.id,
+                            "kind": n.kind.value if isinstance(n.kind, NodeKind) else n.kind,
+                            "name": n.qualified_name,
+                            "file": n.file_path,
+                        })
+
+            click.echo(json.dumps(data, indent=2, default=str))
+        else:
+            # Use ContextAssembler for rich output
+            assembler = ContextAssembler()
+            result = assembler.assemble_impact_analysis(
+                symbol, store, analyzer, token_budget=budget
+            )
+            formatter.render_to_console(result.text, console)
+
+            console.print()
+            console.print(
+                f"[dim]Tokens: {result.tokens_used}/{result.token_budget} | "
+                f"Nodes: {result.nodes_included}/{result.nodes_available}[/dim]"
+            )
+    finally:
+        store.close()
+
+
+# ── architecture ──────────────────────────────────────────────
+
+@cli.command()
+@click.option(
+    "--top", "-t", default=20, show_default=True,
+    help="Number of top nodes to show.",
+)
+@click.option(
+    "--format", "fmt", type=click.Choice(["markdown", "json"]), default="markdown",
+    help="Output format.",
+)
+@click.pass_context
+def architecture(ctx: click.Context, top: int, fmt: str) -> None:
+    """Show architecture overview of the codebase.
+
+    Displays communities, important nodes (by PageRank),
+    and entry points.
+    """
+    from coderag.analysis.networkx_analyzer import NetworkXAnalyzer
+
+    config = _load_config(ctx.obj["config_path"])
+    if ctx.obj["db_override"]:
+        config.db_path = ctx.obj["db_override"]
+
+    store = _open_store(config)
+
+    try:
+        # Load graph
+        with console.status("[bold cyan]Loading graph into analyzer..."):
+            analyzer = NetworkXAnalyzer()
+            analyzer.load_from_store(store)
+
+        console.print(
+            f"[green]✓[/green] Graph loaded: "
+            f"[bold]{analyzer.node_count:,}[/bold] nodes, "
+            f"[bold]{analyzer.edge_count:,}[/bold] edges"
+        )
+        console.print()
+
+        # Compute analyses
+        with console.status("[bold cyan]Computing PageRank..."):
+            pr_scores = analyzer.pagerank()
+            top_nodes_raw = analyzer.get_top_nodes("pagerank", limit=top)
+
+        with console.status("[bold cyan]Detecting communities..."):
+            communities_raw = analyzer.community_detection()
+
+        with console.status("[bold cyan]Finding entry points..."):
+            entry_point_ids = analyzer.get_entry_points(limit=15)
+
+        with console.status("[bold cyan]Computing statistics..."):
+            stats = analyzer.get_statistics()
+
+        if fmt == "json":
+            data = {
+                "statistics": stats,
+                "top_nodes": [
+                    {
+                        "id": nid,
+                        "name": analyzer.get_node_info(nid).get("qualified_name", nid),
+                        "kind": analyzer.get_node_info(nid).get("kind", "unknown"),
+                        "score": score,
+                    }
+                    for nid, score in top_nodes_raw
+                ],
+                "communities": [
+                    {"id": i, "size": len(c), "members_sample": list(c)[:10]}
+                    for i, c in enumerate(communities_raw[:20])
+                ],
+                "entry_points": [
+                    {
+                        "id": nid,
+                        "name": analyzer.get_node_info(nid).get("qualified_name", nid),
+                        "kind": analyzer.get_node_info(nid).get("kind", "unknown"),
+                    }
+                    for nid in entry_point_ids
+                ],
+            }
+            click.echo(json.dumps(data, indent=2, default=str))
+        else:
+            # Resolve nodes for formatting
+            important_nodes: list[tuple["Node", float]] = []
+            for nid, score in top_nodes_raw:
+                node = store.get_node(nid)
+                if node:
+                    important_nodes.append((node, score))
+
+            entry_points: list["Node"] = []
+            for nid in entry_point_ids:
+                node = store.get_node(nid)
+                if node:
+                    entry_points.append(node)
+
+            communities: list[tuple[int, list["Node"]]] = []
+            for i, comm_set in enumerate(communities_raw[:10]):
+                comm_nodes = []
+                for nid in list(comm_set)[:50]:  # Cap per community
+                    node = store.get_node(nid)
+                    if node:
+                        comm_nodes.append(node)
+                communities.append((i, comm_nodes))
+
+            # Format and display
+            md = MarkdownFormatter.format_architecture_overview(
+                communities, important_nodes, entry_points
+            )
+            formatter.render_to_console(md, console)
+
+            # Stats summary
+            console.print()
+            console.print("[bold]Graph Statistics[/bold]")
+            console.print(f"  Density: {stats.get('density', 0):.6f}")
+            console.print(f"  Avg In-Degree: {stats.get('avg_in_degree', 0):.1f}")
+            console.print(f"  Avg Out-Degree: {stats.get('avg_out_degree', 0):.1f}")
+            console.print(f"  Weakly Connected Components: {stats.get('weakly_connected_components', 0)}")
+            console.print(f"  Strongly Connected Components: {stats.get('strongly_connected_components', 0)}")
+            console.print(f"  Is DAG: {stats.get('is_dag', False)}")
+    finally:
+        store.close()
+
 # ── Entry Point ───────────────────────────────────────────────
 
 if __name__ == "__main__":

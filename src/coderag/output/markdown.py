@@ -530,3 +530,275 @@ class MarkdownFormatter:
             )
 
         console.print(table)
+
+    # ── Extended Formatting Methods (P2) ──────────────────────
+
+    @staticmethod
+    def format_node_detailed(
+        node: Node,
+        edges: list[Edge],
+        related_nodes: dict[str, Node],
+        detail_level: str = "summary",
+    ) -> str:
+        """Format a node with full relationship details.
+
+        Args:
+            node: The central node.
+            edges: All edges connected to this node.
+            related_nodes: Dict mapping node IDs to Node objects.
+            detail_level: One of 'signature', 'summary', 'detailed', 'comprehensive'.
+
+        Returns:
+            Markdown-formatted string.
+        """
+        detail_map = {
+            "signature": DetailLevel.SIGNATURE,
+            "summary": DetailLevel.SUMMARY,
+            "detailed": DetailLevel.DETAILED,
+            "comprehensive": DetailLevel.COMPREHENSIVE,
+        }
+        detail = detail_map.get(detail_level, DetailLevel.SUMMARY)
+
+        lines: list[str] = []
+
+        # Node header
+        kind = node.kind.value if isinstance(node.kind, NodeKind) else node.kind
+        lines.append(f"## {kind.title()}: `{node.qualified_name}`")
+        lines.append("")
+
+        # Basic info
+        lines.append(f"- **File**: `{node.file_path}:{node.start_line}-{node.end_line}`")
+        lines.append(f"- **Language**: {node.language}")
+
+        if node.metadata:
+            vis = node.metadata.get("visibility", "")
+            if vis:
+                lines.append(f"- **Visibility**: {vis}")
+            sig = node.metadata.get("signature", "")
+            if sig:
+                lines.append(f"- **Signature**: `{sig}`")
+
+        if detail in (DetailLevel.DETAILED, DetailLevel.COMPREHENSIVE):
+            if node.docblock:
+                lines.append("")
+                lines.append("### Documentation")
+                lines.append("")
+                lines.append(f"```")
+                lines.append(node.docblock)
+                lines.append(f"```")
+
+        if detail == DetailLevel.COMPREHENSIVE and node.source_text:
+            lines.append("")
+            lines.append("### Source")
+            lines.append("")
+            lang = node.language or ""
+            lines.append(f"```{lang}")
+            lines.append(node.source_text)
+            lines.append("```")
+
+        # Relationships
+        if edges and detail != DetailLevel.SIGNATURE:
+            outgoing = [e for e in edges if e.source_id == node.id]
+            incoming = [e for e in edges if e.target_id == node.id]
+
+            if outgoing:
+                lines.append("")
+                lines.append("### Outgoing Relationships")
+                lines.append("")
+                for edge in outgoing:
+                    ek = edge.kind.value if isinstance(edge.kind, EdgeKind) else edge.kind
+                    target = related_nodes.get(edge.target_id)
+                    if target:
+                        tk = target.kind.value if isinstance(target.kind, NodeKind) else target.kind
+                        lines.append(
+                            f"- **{ek}** → `{target.qualified_name}` "
+                            f"({tk}, `{target.file_path}:{target.start_line}`)"
+                        )
+                    else:
+                        lines.append(f"- **{ek}** → `{edge.target_id}`")
+
+            if incoming:
+                lines.append("")
+                lines.append("### Incoming Relationships")
+                lines.append("")
+                for edge in incoming:
+                    ek = edge.kind.value if isinstance(edge.kind, EdgeKind) else edge.kind
+                    source = related_nodes.get(edge.source_id)
+                    if source:
+                        sk = source.kind.value if isinstance(source.kind, NodeKind) else source.kind
+                        lines.append(
+                            f"- **{ek}** ← `{source.qualified_name}` "
+                            f"({sk}, `{source.file_path}:{source.start_line}`)"
+                        )
+                    else:
+                        lines.append(f"- **{ek}** ← `{edge.source_id}`")
+
+        lines.append("")
+        return "\n".join(lines)
+
+    @staticmethod
+    def format_impact_analysis(
+        target_node: Node,
+        impacted_by_depth: dict[int, list[Node]],
+    ) -> str:
+        """Format blast radius / impact analysis results.
+
+        Args:
+            target_node: The node being analyzed.
+            impacted_by_depth: Dict mapping depth to list of affected nodes.
+
+        Returns:
+            Markdown-formatted impact analysis.
+        """
+        lines: list[str] = []
+
+        kind = target_node.kind.value if isinstance(target_node.kind, NodeKind) else target_node.kind
+        total = sum(len(nodes) for nodes in impacted_by_depth.values())
+
+        lines.append(f"## Impact Analysis: `{target_node.qualified_name}`")
+        lines.append("")
+        lines.append(f"- **Kind**: {kind}")
+        lines.append(f"- **File**: `{target_node.file_path}`")
+        lines.append(f"- **Total Affected**: {total} nodes")
+        lines.append("")
+
+        if not impacted_by_depth:
+            lines.append("*No downstream dependencies found — this is a leaf node.*")
+            return "\n".join(lines)
+
+        # Affected files summary
+        all_files: set[str] = {target_node.file_path}
+        for nodes in impacted_by_depth.values():
+            for n in nodes:
+                all_files.add(n.file_path)
+
+        lines.append(f"**Affected Files**: {len(all_files)}")
+        lines.append("")
+
+        for depth in sorted(impacted_by_depth.keys()):
+            nodes = impacted_by_depth[depth]
+            lines.append(f"### Depth {depth} ({len(nodes)} node{'s' if len(nodes) != 1 else ''})")
+            lines.append("")
+
+            # Group by file
+            by_file: dict[str, list[Node]] = {}
+            for n in nodes:
+                by_file.setdefault(n.file_path, []).append(n)
+
+            for fp in sorted(by_file.keys()):
+                file_nodes = by_file[fp]
+                lines.append(f"**`{fp}`**")
+                for n in file_nodes:
+                    nk = n.kind.value if isinstance(n.kind, NodeKind) else n.kind
+                    lines.append(f"  - {nk}: `{n.qualified_name}` (L{n.start_line})")
+            lines.append("")
+
+        # File list
+        lines.append("### All Affected Files")
+        lines.append("")
+        for fp in sorted(all_files):
+            lines.append(f"- `{fp}`")
+        lines.append("")
+
+        return "\n".join(lines)
+
+    @staticmethod
+    def format_architecture_overview(
+        communities: list[tuple[int, list[Node]]],
+        important_nodes: list[tuple[Node, float]],
+        entry_points: list[Node],
+    ) -> str:
+        """Format a high-level architecture overview.
+
+        Args:
+            communities: List of (community_id, nodes) tuples.
+            important_nodes: List of (node, score) tuples sorted by importance.
+            entry_points: List of entry point nodes.
+
+        Returns:
+            Markdown-formatted architecture overview.
+        """
+        lines: list[str] = []
+
+        lines.append("## Architecture Overview")
+        lines.append("")
+
+        # Summary stats
+        total_nodes = sum(len(nodes) for _, nodes in communities)
+        lines.append(f"- **Communities**: {len(communities)}")
+        lines.append(f"- **Total Nodes**: {total_nodes}")
+        lines.append(f"- **Entry Points**: {len(entry_points)}")
+        lines.append("")
+
+        # Important nodes
+        if important_nodes:
+            lines.append("### Key Nodes (by PageRank)")
+            lines.append("")
+            lines.append("| # | Kind | Name | File | Score |")
+            lines.append("|---|------|------|------|-------|")
+            for i, (node, score) in enumerate(important_nodes[:20], 1):
+                kind = node.kind.value if isinstance(node.kind, NodeKind) else node.kind
+                lines.append(
+                    f"| {i} | {kind} | `{node.qualified_name}` "
+                    f"| `{node.file_path}` | {score:.6f} |"
+                )
+            lines.append("")
+
+        # Entry points
+        if entry_points:
+            lines.append("### Entry Points")
+            lines.append("")
+            for node in entry_points[:15]:
+                kind = node.kind.value if isinstance(node.kind, NodeKind) else node.kind
+                lines.append(f"- **{kind}**: `{node.qualified_name}` (`{node.file_path}`)")
+            lines.append("")
+
+        # Communities
+        if communities:
+            lines.append("### Communities")
+            lines.append("")
+            for comm_id, nodes in communities[:10]:
+                # Identify the community by its most common file path prefix
+                file_paths = [n.file_path for n in nodes]
+                if file_paths:
+                    # Find common prefix
+                    common = file_paths[0]
+                    for fp in file_paths[1:]:
+                        while not fp.startswith(common) and common:
+                            common = common.rsplit("/", 1)[0] if "/" in common else ""
+                    if not common:
+                        common = "(mixed)"
+
+                lines.append(f"#### Community {comm_id} — {len(nodes)} nodes")
+                lines.append(f"**Primary path**: `{common}`")
+                lines.append("")
+
+                # Show top nodes by kind
+                kind_counts: dict[str, int] = {}
+                for n in nodes:
+                    k = n.kind.value if isinstance(n.kind, NodeKind) else n.kind
+                    kind_counts[k] = kind_counts.get(k, 0) + 1
+
+                lines.append("Composition: " + ", ".join(
+                    f"{count} {kind}" for kind, count in
+                    sorted(kind_counts.items(), key=lambda x: -x[1])
+                ))
+                lines.append("")
+
+                # Show a few representative nodes
+                shown = 0
+                for n in nodes:
+                    nk = n.kind.value if isinstance(n.kind, NodeKind) else n.kind
+                    if nk in ("class", "interface", "trait", "component", "model"):
+                        lines.append(f"- `{n.qualified_name}`")
+                        shown += 1
+                        if shown >= 5:
+                            break
+
+                if shown == 0:
+                    for n in nodes[:3]:
+                        lines.append(f"- `{n.qualified_name}`")
+
+                lines.append("")
+
+        return "\n".join(lines)
