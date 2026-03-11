@@ -43,9 +43,9 @@ coderag query "Router" --kind class
 
 ## 📊 Benchmarks
 
-Tested against 10 popular open-source PHP repositories and major JS/TS projects:
+Tested against 10 popular PHP repositories and 15 top JS/TS repositories from GitHub.
 
-### PHP Repositories
+### PHP Repositories (10 repos)
 
 | Repository | Files | Nodes | Edges | Parse Time |
 |-----------|-------|-------|-------|------------|
@@ -60,15 +60,46 @@ Tested against 10 popular open-source PHP repositories and major JS/TS projects:
 | **Composer** | 362 | 7,000+ | 14,000+ | ~3s |
 | **Nextcloud** | 5,406 | 85,000+ | 170,000+ | ~45s |
 
-**Totals**: 33,896 PHP files → 516,705 nodes, 1,359,239 edges
+**PHP Totals**: 33,896 files → 516,705 nodes, 1,359,239 edges
 
-### JavaScript & TypeScript
+### JavaScript Repositories (8 repos)
 
-| Repository | Language | Files | Nodes | Edges | Errors |
-|-----------|----------|-------|-------|-------|--------|
-| **Express.js** | JS | 141 | 908 | 1,113 | 0 |
-| **typeorm** | TS | 3,327 | 17,969 | 56,421 | 0 |
-| **zustand** | TS | 50 | 448 | 700 | 0 |
+| Repository | ⭐ Stars | Files | Nodes | Edges | Parse Time |
+|-----------|---------|-------|-------|-------|------------|
+| **lodash** | 60k | 52 | 363 | 377 | 1.7s |
+| **express** | 66k | 141 | 908 | 1,113 | 0.9s |
+| **axios** | 106k | 194 | 2,373 | 3,404 | 1.3s |
+| **socket.io** | 62k | 359 | 3,589 | 7,473 | 2.6s |
+| **moment** | 48k | 763 | 4,699 | 6,818 | 7.6s |
+| **Chart.js** | 65k | 739 | 5,346 | 8,967 | 3.8s |
+| **three.js** | 104k | 1,544 | 58,296 | 130,088 | 33.6s |
+| **webpack** | 65k | 8,301 | 44,237 | 61,250 | 30.1s |
+
+**JS Subtotal**: 12,093 files → 119,811 nodes, 219,490 edges
+
+### TypeScript Repositories (7 repos)
+
+| Repository | ⭐ Stars | Files | Nodes | Edges | Parse Time |
+|-----------|---------|-------|-------|-------|------------|
+| **excalidraw** | 93k | 627 | 6,931 | 21,610 | 5.5s |
+| **nestjs** | 70k | 1,708 | 10,676 | 24,974 | 9.2s |
+| **prisma** | 41k | 2,809 | 12,143 | 33,307 | 12.1s |
+| **ant-design** | 93k | 2,974 | 17,787 | 50,098 | 16.1s |
+| **typeorm** | 34k | 3,327 | 20,091 | 53,480 | 17.1s |
+| **angular** | 97k | 6,361 | 65,768 | 166,014 | 58.5s |
+| **next.js** | 130k | 19,738 | 98,757 | 193,008 | 121.1s |
+
+**TS Subtotal**: 37,544 files → 232,153 nodes, 542,491 edges
+
+### Combined Totals (25 repos)
+
+| Metric | PHP | JS | TS | **Total** |
+|--------|-----|----|----|----------|
+| Repositories | 10 | 8 | 7 | **25** |
+| Files parsed | 33,896 | 12,093 | 37,544 | **83,533** |
+| Nodes extracted | 516,705 | 119,811 | 232,153 | **868,669** |
+| Edges extracted | 1,359,239 | 219,490 | 542,491 | **2,121,220** |
+| Query hit rate | 100% | 97% | 97% | **97%+** |
 
 ### Multi-Language (PHP + JS + TS + TSX)
 
