@@ -89,6 +89,21 @@ Tested against 10 popular PHP repositories and 15 top JS/TS repositories from Gi
 | **angular** | 97k | 6,361 | 65,768 | 166,014 | 58.5s |
 | **next.js** | 130k | 19,738 | 98,757 | 193,008 | 121.1s |
 
+
+### Mixed-Language Repositories (4 repos)
+
+Testing multi-language parsing within single repositories:
+
+| Repository | Description | PHP | JS | TS | Files | Nodes | Edges | Time |
+|-----------|-------------|-----|----|----|-------|-------|-------|------|
+| koel | Music streaming (Laravel + Vue/TS) | 1,036 | 6 | 525 | 1,567 | 15,034 | 32,860 | 9.1s |
+| monica | Personal CRM (Laravel + Vue) | 1,649 | 8 | 0 | 1,657 | 20,697 | 52,841 | 15.6s |
+| flarum | Forum framework (PHP + JS/TS) | 1,358 | 207 | 990 | 2,555 | 28,250 | 64,603 | 17.9s |
+| bagisto | E-commerce (Laravel + Vue) | 2,253 | 36 | 143 | 2,432 | 17,197 | 35,067 | 14.7s |
+
+**Mixed-language query accuracy: 35/35 (100%)**  
+**Cross-language edges detected: 15** (Flarum PHP↔JS/TS name-based matches)
+
 **TS Subtotal**: 37,544 files → 232,153 nodes, 542,491 edges
 
 ### Combined Totals (25 repos)
