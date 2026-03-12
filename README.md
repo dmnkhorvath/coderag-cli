@@ -486,6 +486,7 @@ class MyExtractor(ASTExtractor):
 | PHP | 10 | 34,891 | 516,478 | 1,058,929 | ~45s |
 | JavaScript | 8 | 24,321 | 176,095 | 531,145 | ~30s |
 | TypeScript | 7 | 24,321 | 176,096 | 531,146 | ~35s |
+| Python | 10 | 5,968 | 206,563 | 448,830 | ~13s |
 
 ### Mixed-Language Repositories
 
@@ -500,10 +501,10 @@ class MyExtractor(ASTExtractor):
 
 | Metric | Value |
 |--------|-------|
-| **Repositories benchmarked** | 29 |
-| **Total files parsed** | 91,745 |
-| **Total nodes extracted** | 949,847 |
-| **Total edges created** | 2,306,591 |
+| **Repositories benchmarked** | 39 |
+| **Total files parsed** | 97,713 |
+| **Total nodes extracted** | 1,156,410 |
+| **Total edges created** | 2,755,421 |
 | **Query accuracy** | 97–100% |
 | **Cross-language edges** | Detected in all mixed repos |
 
