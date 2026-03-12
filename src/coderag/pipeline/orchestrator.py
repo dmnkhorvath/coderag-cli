@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from typing import Any
 
 from coderag.core.config import CodeGraphConfig
@@ -29,6 +29,52 @@ from coderag.pipeline.scanner import FileScanner
 from coderag.storage.sqlite_store import SQLiteStore
 
 logger = logging.getLogger(__name__)
+
+
+
+# =============================================================================
+# MODULE-LEVEL WORKER FUNCTIONS (for ProcessPoolExecutor pickling)
+# =============================================================================
+
+_worker_registry: PluginRegistry | None = None
+
+
+def _init_extraction_worker() -> None:
+    """Initialize plugin registry in each worker process.
+
+    Called once per worker by ProcessPoolExecutor's initializer.
+    """
+    global _worker_registry
+    _worker_registry = PluginRegistry()
+    _worker_registry.discover_builtin_plugins()
+
+
+def _extract_worker(file_path: str) -> tuple[str, ExtractionResult | None, str | None, str | None]:
+    """Extract a single file in a worker process.
+
+    Must be a top-level function for ProcessPoolExecutor pickling.
+
+    Args:
+        file_path: Absolute path to the file to extract.
+
+    Returns:
+        Tuple of (file_path, result, plugin_name, error_string).
+    """
+    global _worker_registry
+    if _worker_registry is None:
+        _init_extraction_worker()
+
+    plugin = _worker_registry.get_plugin_for_file(file_path)
+    if plugin is None:
+        return file_path, None, None, None
+    try:
+        with open(file_path, "rb") as f:
+            source = f.read()
+        extractor = plugin.get_extractor()
+        result = extractor.extract(file_path, source)
+        return file_path, result, plugin.name, None
+    except Exception as exc:
+        return file_path, None, None, str(exc)
 
 
 class PipelineOrchestrator:
@@ -87,8 +133,17 @@ class PipelineOrchestrator:
         all_results: list[ExtractionResult] = []
         parse_time_ms = 0.0
 
-        def _extract_single(fi: FileInfo) -> tuple[FileInfo, ExtractionResult | None, str | None, str | None]:
-            """Extract a single file. Returns (fi, result, plugin_name, error)."""
+        # Build a lookup from file_path -> FileInfo for persistence
+        fi_lookup = {fi.path: fi for fi in changed_files}
+        perf = self._config.perf_config
+        batch_size = perf.batch_size
+        extraction_workers = min(
+            perf.resolved_extraction_workers,
+            max(1, len(changed_files)),
+        )
+
+        def _extract_single_thread(fi: FileInfo) -> tuple[FileInfo, ExtractionResult | None, str | None, str | None]:
+            """Fallback extraction using ThreadPoolExecutor."""
             plugin = self._registry.get_plugin_for_file(fi.path)
             if plugin is None:
                 return fi, None, None, None
@@ -100,39 +155,96 @@ class PipelineOrchestrator:
             except Exception as exc:
                 return fi, None, None, str(exc)
 
-        # Use ThreadPoolExecutor for I/O-bound file reading + CPU-light parsing
-        max_workers = min(8, max(1, len(changed_files)))
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = {
-                executor.submit(_extract_single, fi): fi
-                for fi in changed_files
-            }
-            for future in as_completed(futures):
-                fi, result, plugin_name, error = future.result()
-                if error:
-                    logger.error("Failed to process %s: %s", fi.path, error)
-                    files_errored += 1
-                    continue
-                if result is None:
-                    continue
+        def _process_extraction_result(
+            file_path: str,
+            result: ExtractionResult | None,
+            plugin_name: str | None,
+            error: str | None,
+        ) -> None:
+            """Process a single extraction result (shared by both executors)."""
+            nonlocal total_nodes, total_edges, files_parsed, files_errored, parse_time_ms
 
-                all_results.append(result)
-                n_nodes = len(result.nodes)
-                n_edges = len(result.edges)
-                total_nodes += n_nodes
-                total_edges += n_edges
-                parse_time_ms += result.parse_time_ms
-                files_parsed += 1
+            if error:
+                logger.error("Failed to process %s: %s", file_path, error)
+                files_errored += 1
+                return
+            if result is None:
+                return
 
-                if result.errors:
-                    for err in result.errors:
-                        logger.warning(
-                            "%s:%s: %s",
-                            err.file_path, err.line_number, err.message,
-                        )
+            all_results.append(result)
+            n_nodes = len(result.nodes)
+            n_edges = len(result.edges)
+            total_nodes += n_nodes
+            total_edges += n_edges
+            parse_time_ms += result.parse_time_ms
+            files_parsed += 1
 
-                # ── Phase 8a: Persist nodes & containment edges ──
+            if result.errors:
+                for err in result.errors:
+                    logger.warning(
+                        "%s:%s: %s",
+                        err.file_path, err.line_number, err.message,
+                    )
+
+            # ── Phase 8a: Persist nodes & containment edges ──
+            fi = fi_lookup.get(file_path)
+            if fi and plugin_name:
                 self._persist_result(result, fi, plugin_name)
+
+        # Try ProcessPoolExecutor first (CPU-bound tree-sitter parsing)
+        use_process_pool = extraction_workers > 1 and len(changed_files) > 1
+
+        if use_process_pool:
+            try:
+                logger.info(
+                    "Phase 3: Using ProcessPoolExecutor with %d workers, batch_size=%d",
+                    extraction_workers, batch_size,
+                )
+                # Process files in chunks to bound memory
+                for chunk_start in range(0, len(changed_files), batch_size):
+                    chunk = changed_files[chunk_start : chunk_start + batch_size]
+                    file_paths = [fi.path for fi in chunk]
+
+                    with ProcessPoolExecutor(
+                        max_workers=extraction_workers,
+                        initializer=_init_extraction_worker,
+                    ) as executor:
+                        futures = {
+                            executor.submit(_extract_worker, fp): fp
+                            for fp in file_paths
+                        }
+                        for future in as_completed(futures):
+                            file_path, result, plugin_name, error = future.result()
+                            _process_extraction_result(
+                                file_path, result, plugin_name, error,
+                            )
+
+                logger.debug("ProcessPoolExecutor extraction completed successfully.")
+
+            except (OSError, RuntimeError, BrokenPipeError) as exc:
+                # Fall back to ThreadPoolExecutor if ProcessPool fails
+                logger.warning(
+                    "ProcessPoolExecutor failed (%s), falling back to ThreadPoolExecutor.",
+                    exc,
+                )
+                use_process_pool = False
+
+        if not use_process_pool:
+            # Fallback: ThreadPoolExecutor (also used for single-file case)
+            logger.info(
+                "Phase 3: Using ThreadPoolExecutor with %d workers",
+                extraction_workers,
+            )
+            with ThreadPoolExecutor(max_workers=extraction_workers) as executor:
+                futures = {
+                    executor.submit(_extract_single_thread, fi): fi
+                    for fi in changed_files
+                }
+                for future in as_completed(futures):
+                    fi, result, plugin_name, error = future.result()
+                    _process_extraction_result(
+                        fi.path, result, plugin_name, error,
+                    )
 
         logger.info(
             "Phase 3 complete: %d files parsed, %d errors, %d nodes, %d edges in %.1fms",

@@ -43,6 +43,9 @@ PRAGMA journal_mode = WAL;
 PRAGMA synchronous = NORMAL;
 PRAGMA foreign_keys = ON;
 PRAGMA cache_size = -64000;  -- 64MB cache
+PRAGMA wal_autocheckpoint = 10000;  -- Reduce checkpoint frequency for bulk writes
+PRAGMA mmap_size = 268435456;  -- 256MB memory-mapped I/O
+PRAGMA temp_store = MEMORY;  -- Keep temp tables in memory
 
 -- Nodes table
 CREATE TABLE IF NOT EXISTS nodes (
@@ -68,6 +71,9 @@ CREATE INDEX IF NOT EXISTS idx_nodes_language ON nodes(language);
 CREATE INDEX IF NOT EXISTS idx_nodes_qualified_name ON nodes(qualified_name);
 CREATE INDEX IF NOT EXISTS idx_nodes_pagerank ON nodes(pagerank DESC);
 CREATE INDEX IF NOT EXISTS idx_nodes_name ON nodes(name);
+CREATE INDEX IF NOT EXISTS idx_nodes_file_kind ON nodes(file_path, kind);
+CREATE INDEX IF NOT EXISTS idx_nodes_kind_pagerank ON nodes(kind, pagerank DESC);
+CREATE INDEX IF NOT EXISTS idx_nodes_lang_kind ON nodes(language, kind);
 
 -- Edges table
 CREATE TABLE IF NOT EXISTS edges (
@@ -84,6 +90,10 @@ CREATE INDEX IF NOT EXISTS idx_edges_source ON edges(source_id);
 CREATE INDEX IF NOT EXISTS idx_edges_target ON edges(target_id);
 CREATE INDEX IF NOT EXISTS idx_edges_kind ON edges(kind);
 CREATE INDEX IF NOT EXISTS idx_edges_confidence ON edges(confidence DESC);
+CREATE INDEX IF NOT EXISTS idx_edges_source_kind ON edges(source_id, kind);
+CREATE INDEX IF NOT EXISTS idx_edges_target_kind ON edges(target_id, kind);
+CREATE INDEX IF NOT EXISTS idx_edges_source_conf ON edges(source_id, confidence DESC);
+CREATE INDEX IF NOT EXISTS idx_edges_target_conf ON edges(target_id, confidence DESC);
 
 -- File hash tracking for incremental updates
 CREATE TABLE IF NOT EXISTS files (
@@ -185,6 +195,12 @@ class SQLiteStore:
 
         # Execute schema
         self._conn.executescript(_SCHEMA_SQL)
+
+        # Runtime performance pragmas (not persisted in schema)
+        try:
+            self._conn.execute("PRAGMA threads = 4")
+        except sqlite3.OperationalError:
+            pass  # Not all SQLite builds support this
 
         # FTS5 setup (separate because it may already exist)
         try:

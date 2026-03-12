@@ -71,6 +71,12 @@ _DEFAULT_PERFORMANCE: dict[str, Any] = {
     "max_workers": 4,
     "batch_size": 100,
     "max_file_size_bytes": 1_000_000,
+    "extraction_workers": "auto",
+    "io_workers": "auto",
+    "sqlite_batch_size": 1000,
+    "embedding_batch_size": 128,
+    "max_memory_mb": 4096,
+    "use_gpu": "auto",
 }
 
 _DEFAULT_SEMANTIC: dict[str, Any] = {
@@ -79,6 +85,56 @@ _DEFAULT_SEMANTIC: dict[str, Any] = {
     "batch_size": 128,
 }
 
+
+
+@dataclass
+class PerformanceConfig:
+    """Performance tuning configuration.
+
+    Provides typed access to performance settings with auto-resolution
+    of worker counts based on available CPU cores.
+    """
+
+    extraction_workers: int | str = "auto"
+    io_workers: int | str = "auto"
+    batch_size: int = 500
+    sqlite_batch_size: int = 1000
+    embedding_batch_size: int = 128
+    max_memory_mb: int = 4096
+    max_workers: int = 4
+    max_file_size_bytes: int = 1_000_000
+    use_gpu: str = "auto"
+
+    @property
+    def resolved_extraction_workers(self) -> int:
+        """Resolve extraction worker count (CPU-bound tasks)."""
+        if self.extraction_workers == "auto":
+            import os
+            return min(os.cpu_count() or 4, 8)
+        return int(self.extraction_workers)
+
+    @property
+    def resolved_io_workers(self) -> int:
+        """Resolve I/O worker count (I/O-bound tasks)."""
+        if self.io_workers == "auto":
+            import os
+            return min((os.cpu_count() or 4) * 2, 16)
+        return int(self.io_workers)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "PerformanceConfig":
+        """Create from a performance config dictionary."""
+        return cls(
+            extraction_workers=data.get("extraction_workers", "auto"),
+            io_workers=data.get("io_workers", "auto"),
+            batch_size=data.get("batch_size", 500),
+            sqlite_batch_size=data.get("sqlite_batch_size", 1000),
+            embedding_batch_size=data.get("embedding_batch_size", 128),
+            max_memory_mb=data.get("max_memory_mb", 4096),
+            max_workers=data.get("max_workers", 4),
+            max_file_size_bytes=data.get("max_file_size_bytes", 1_000_000),
+            use_gpu=data.get("use_gpu", "auto"),
+        )
 
 # =============================================================================
 # CONFIGURATION DATACLASS
@@ -278,6 +334,12 @@ class CodeGraphConfig:
         """Batch size for embedding operations."""
         return int(self.semantic.get("batch_size", 128))
 
+    @property
+    def perf_config(self) -> "PerformanceConfig":
+        """Get typed performance configuration."""
+        return PerformanceConfig.from_dict(self.performance)
+
+
 
     # ── Validation ────────────────────────────────────────────
 
@@ -299,6 +361,12 @@ class CodeGraphConfig:
             raise ValueError("performance.batch_size must be >= 1")
         if perf.get("max_file_size_bytes", 1_000_000) < 1:
             raise ValueError("performance.max_file_size_bytes must be >= 1")
+        sqlite_bs = perf.get("sqlite_batch_size", 1000)
+        if isinstance(sqlite_bs, int) and sqlite_bs < 1:
+            raise ValueError("performance.sqlite_batch_size must be >= 1")
+        max_mem = perf.get("max_memory_mb", 4096)
+        if isinstance(max_mem, int) and max_mem < 64:
+            raise ValueError("performance.max_memory_mb must be >= 64")
 
         cl = self.cross_language
         min_conf = cl.get("min_confidence", 0.3)
@@ -381,4 +449,4 @@ def _deep_merge(
 # MODULE EXPORTS
 # =============================================================================
 
-__all__ = ["CodeGraphConfig"]
+__all__ = ["CodeGraphConfig", "PerformanceConfig"]
