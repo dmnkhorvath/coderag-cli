@@ -261,9 +261,34 @@ def info(ctx: click.Context, as_json: bool) -> None:
     type=int,
     help="Maximum number of results.",
 )
+@click.option(
+    "--semantic", "mode",
+    flag_value="semantic",
+    help="Use pure semantic (vector) search.",
+)
+@click.option(
+    "--hybrid", "mode",
+    flag_value="hybrid",
+    help="Use hybrid search (FTS5 + vector). Default when vector index exists.",
+)
+@click.option(
+    "--fts", "mode",
+    flag_value="fts",
+    help="Use pure FTS5 (keyword) search.",
+)
+@click.option(
+    "--alpha", "-a",
+    default=0.5,
+    type=float,
+    help="Hybrid search balance: 0.0=pure FTS, 1.0=pure vector (default: 0.5).",
+)
 @click.pass_context
-def query(ctx: click.Context, search: str, kind: str | None, depth: int, fmt: str, limit: int) -> None:
-    """Query the knowledge graph by searching for symbols."""
+def query(ctx: click.Context, search: str, kind: str | None, depth: int, fmt: str, limit: int, mode: str | None, alpha: float) -> None:
+    """Query the knowledge graph by searching for symbols.
+
+    Supports three search modes: FTS5 (keyword), semantic (vector), and hybrid.
+    When a vector index exists, hybrid mode is used by default.
+    """
     config = _load_config(ctx.obj["config_path"])
     if ctx.obj["db_override"]:
         config.db_path = ctx.obj["db_override"]
@@ -271,7 +296,133 @@ def query(ctx: click.Context, search: str, kind: str | None, depth: int, fmt: st
     store = _open_store(config)
 
     try:
-        # Search nodes (kind filter applied at SQL level for efficiency)
+        # Determine search mode
+        use_semantic = False
+        use_hybrid = False
+        vector_dir = os.path.dirname(config.db_path_absolute)
+
+        if mode == "semantic":
+            use_semantic = True
+        elif mode == "hybrid":
+            use_hybrid = True
+        elif mode is None:
+            # Auto-detect: use hybrid if vector index exists
+            try:
+                from coderag.search import SEMANTIC_AVAILABLE
+                if SEMANTIC_AVAILABLE:
+                    from coderag.search.vector_store import VectorStore
+                    if VectorStore.exists(vector_dir):
+                        use_hybrid = True
+            except ImportError:
+                pass
+
+        # Semantic or hybrid search
+        if use_semantic or use_hybrid:
+            try:
+                from coderag.search import SEMANTIC_AVAILABLE, require_semantic
+                require_semantic()
+                from coderag.search.embedder import CodeEmbedder
+                from coderag.search.vector_store import VectorStore
+                from coderag.search.hybrid import HybridSearcher, SearchResult
+
+                if not VectorStore.exists(vector_dir):
+                    console.print(
+                        "[yellow]No vector index found. Run 'coderag embed' first.[/yellow]"
+                    )
+                    console.print("Falling back to FTS5 search...\n")
+                    use_semantic = False
+                    use_hybrid = False
+                else:
+                    embedder = CodeEmbedder(config.semantic_model)
+                    vs = VectorStore.load(vector_dir)
+                    searcher = HybridSearcher(store, vs, embedder)
+
+                    if use_semantic:
+                        search_results = searcher.search_semantic(search, k=limit, kind=kind.lower() if kind else None)
+                    else:
+                        search_results = searcher.search(search, k=limit, alpha=alpha, kind=kind.lower() if kind else None)
+
+                    if fmt == "json":
+                        data = []
+                        for sr in search_results:
+                            node = store.get_node(sr.node_id)
+                            if node is None:
+                                continue
+                            node_data = {
+                                "id": sr.node_id,
+                                "kind": sr.kind,
+                                "name": sr.name,
+                                "qualified_name": sr.qualified_name,
+                                "file_path": sr.file_path,
+                                "language": sr.language,
+                                "score": sr.score,
+                                "match_type": sr.match_type,
+                                "vector_similarity": sr.vector_similarity,
+                            }
+                            if depth > 0:
+                                neighbors = store.get_neighbors(node.id, max_depth=depth)
+                                node_data["relationships"] = [
+                                    {
+                                        "node": {
+                                            "id": n.id,
+                                            "kind": n.kind.value if isinstance(n.kind, NodeKind) else n.kind,
+                                            "name": n.qualified_name,
+                                        },
+                                        "edge_kind": e.kind.value if hasattr(e.kind, "value") else e.kind,
+                                        "direction": "outgoing" if e.source_id == node.id else "incoming",
+                                        "confidence": e.confidence,
+                                        "depth": d,
+                                    }
+                                    for n, e, d in neighbors
+                                ]
+                            data.append(node_data)
+                        click.echo(json.dumps(data, indent=2, default=str))
+                    else:
+                        if not search_results:
+                            console.print(f"[yellow]No results found for:[/yellow] [bold]{search}[/bold]")
+                            return
+
+                        mode_label = "semantic" if use_semantic else f"hybrid (alpha={alpha})"
+                        console.print(f"[dim]Search mode: {mode_label}[/dim]\n")
+
+                        table = Table(title=f"Search results for '{search}'")
+                        table.add_column("#", style="dim", width=4)
+                        table.add_column("Symbol", style="cyan")
+                        table.add_column("Kind", style="green")
+                        table.add_column("File", style="blue")
+                        table.add_column("Match", style="magenta")
+                        table.add_column("Score", style="yellow", justify="right")
+
+                        for i, sr in enumerate(search_results, 1):
+                            table.add_row(
+                                str(i),
+                                sr.qualified_name or sr.name,
+                                sr.kind,
+                                sr.file_path or "",
+                                sr.match_type,
+                                f"{sr.score:.4f}",
+                            )
+                        console.print(table)
+
+                        if depth > 0:
+                            console.print()
+                            for sr in search_results:
+                                node = store.get_node(sr.node_id)
+                                if node is None:
+                                    continue
+                                neighbors = store.get_neighbors(node.id, max_depth=depth)
+                                md = formatter.format_node_with_edges(node, neighbors, DetailLevel.SUMMARY)
+                                formatter.render_to_console(md, console)
+                                console.print("---")
+                    return
+            except ImportError:
+                console.print(
+                    "[yellow]Semantic search requires extra dependencies.[/yellow]\n"
+                    "Install with: [bold]pip install coderag[semantic][/bold]\n"
+                    "Falling back to FTS5 search...\n"
+                )
+
+        # FTS5 search (default fallback)
         results = store.search_nodes(search, limit=limit, kind=kind.lower() if kind else None)
 
         if fmt == "json":
@@ -1168,6 +1319,160 @@ def enrich(ctx: click.Context, phpstan: bool, level: int, phpstan_path: str) -> 
                 console.print(table)
         finally:
             store.close()
+
+
+# ── embed ─────────────────────────────────────────────────────
+
+@cli.command()
+@click.argument("path", type=click.Path(exists=True))
+@click.option(
+    "--model", "-m",
+    default=None,
+    help="Sentence-transformer model name (default: from config or all-MiniLM-L6-v2).",
+)
+@click.option(
+    "--batch-size", "-b",
+    default=None,
+    type=int,
+    help="Embedding batch size (default: from config or 128).",
+)
+@click.pass_context
+def embed(ctx: click.Context, path: str, model: str | None, batch_size: int | None) -> None:
+    """Build or rebuild the semantic vector index for a project.
+
+    Embeds all nodes in the knowledge graph using sentence-transformers
+    and stores the FAISS index alongside the SQLite database.
+
+    Example:
+        coderag embed /path/to/project
+        coderag embed /path/to/project --model all-mpnet-base-v2
+    """
+    try:
+        from coderag.search import require_semantic
+        require_semantic()
+    except ImportError:
+        console.print(
+            "[red]Semantic search requires extra dependencies.[/red]\n"
+            "Install with: [bold]pip install coderag[semantic][/bold]\n"
+            "Or: [bold]pip install sentence-transformers faiss-cpu[/bold]"
+        )
+        raise SystemExit(1)
+
+    from coderag.search.embedder import CodeEmbedder
+    from coderag.search.vector_store import VectorStore
+
+    config = _load_config(ctx.obj["config_path"], project_root=path)
+    if ctx.obj["db_override"]:
+        config.db_path = ctx.obj["db_override"]
+
+    store = _open_store(config)
+
+    # Resolve model and batch size from args or config
+    model_name = model or config.semantic_model
+    bs = batch_size or config.semantic_batch_size
+
+    try:
+        console.print(Panel(
+            f"[bold]Semantic Index Builder[/bold]\n\n"
+            f"Project: {os.path.abspath(path)}\n"
+            f"Database: {config.db_path_absolute}\n"
+            f"Model: {model_name}\n"
+            f"Batch size: {bs}",
+            title="CodeRAG Embed",
+            border_style="blue",
+        ))
+
+        # Get all nodes
+        stats = store.get_stats()
+        total_nodes = stats.get("total_nodes", 0)
+        if total_nodes == 0:
+            console.print("[yellow]No nodes found. Run 'coderag parse' first.[/yellow]")
+            return
+
+        console.print(f"\n[bold]Loading {total_nodes} nodes...[/bold]")
+
+        # Fetch all nodes from the store
+        all_nodes = store.get_all_nodes()
+        console.print(f"Loaded {len(all_nodes)} nodes")
+
+        # Build parent context map for methods
+        parent_map: dict[str, str] = {}
+        for node in all_nodes:
+            # Check edges for containment to find parent names
+            pass  # We'll use qualified_name splitting instead
+
+        # Build text representations
+        console.print("\n[bold]Building text representations...[/bold]")
+        embedder = CodeEmbedder(model_name)
+        texts: list[str] = []
+        node_ids: list[str] = []
+
+        for node in all_nodes:
+            # Derive parent name from qualified_name
+            parent_name = None
+            if node.qualified_name and "." in node.qualified_name:
+                parts = node.qualified_name.rsplit(".", 1)
+                if len(parts) == 2:
+                    parent_name = parts[0]
+            elif node.qualified_name and "::" in node.qualified_name:
+                parts = node.qualified_name.rsplit("::", 1)
+                if len(parts) == 2:
+                    parent_name = parts[0]
+
+            text = embedder.build_node_text(node, parent_name=parent_name)
+            texts.append(text)
+            node_ids.append(node.id)
+
+        console.print(f"Built {len(texts)} text representations")
+
+        # Embed in batches with progress
+        console.print(f"\n[bold]Embedding nodes...[/bold] (model: {model_name})")
+        import numpy as np
+
+        t0 = time.time()
+        all_embeddings = embedder.embed_batch(texts, batch_size=bs)
+        embed_time = time.time() - t0
+
+        console.print(
+            f"Embedded {len(texts)} nodes in {embed_time:.1f}s "
+            f"({len(texts) / embed_time:.0f} nodes/sec)"
+        )
+
+        # Build and save index
+        console.print("\n[bold]Building FAISS index...[/bold]")
+        vs = VectorStore(embedder.dimension)
+        vs.build_index(all_embeddings, node_ids)
+
+        vector_dir = os.path.dirname(config.db_path_absolute)
+        vs.save(vector_dir)
+
+        # Show stats
+        index_path = os.path.join(vector_dir, "vectors.faiss")
+        meta_path = os.path.join(vector_dir, "vectors_meta.json")
+        index_size = os.path.getsize(index_path) if os.path.exists(index_path) else 0
+        meta_size = os.path.getsize(meta_path) if os.path.exists(meta_path) else 0
+
+        console.print()
+        table = Table(title="Semantic Index Statistics")
+        table.add_column("Metric", style="cyan")
+        table.add_column("Value", style="green", justify="right")
+        table.add_row("Model", model_name)
+        table.add_row("Dimensions", str(embedder.dimension))
+        table.add_row("Nodes Embedded", f"{vs.size:,}")
+        table.add_row("Index Size", f"{index_size / 1024:.1f} KB")
+        table.add_row("Metadata Size", f"{meta_size / 1024:.1f} KB")
+        table.add_row("Embedding Time", f"{embed_time:.1f}s")
+        table.add_row("Throughput", f"{len(texts) / embed_time:.0f} nodes/sec")
+        console.print(table)
+
+        console.print(
+            f"\n[green]✓ Semantic index saved to {vector_dir}[/green]\n"
+            f"Use [bold]coderag query 'your query' --semantic[/bold] to search."
+        )
+
+    finally:
+        store.close()
+
 
 # ── Entry Point ───────────────────────────────────────────────
 

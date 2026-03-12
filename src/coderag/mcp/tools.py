@@ -6,6 +6,7 @@ the knowledge graph to LLMs via the Model Context Protocol.
 from __future__ import annotations
 
 import fnmatch
+import os
 import logging
 from enum import Enum
 from typing import Any
@@ -523,6 +524,7 @@ def register_tools(mcp: Any, store: Any, analyzer: Any) -> None:
         query: str,
         node_types: list[str] | None = None,
         language: str | None = None,
+        mode: str = "auto",
         limit: int = 20,
         token_budget: int = 4000,
     ) -> str:
@@ -532,6 +534,7 @@ def register_tools(mcp: Any, store: Any, analyzer: Any) -> None:
             query: Search query (matches names, qualified names, docblocks).
             node_types: Filter by node types (e.g. ["class", "function", "route"]).
             language: Filter by language (e.g. "php", "javascript", "typescript").
+            mode: Search mode — "fts" (keyword), "semantic" (vector), "hybrid" (both), or "auto" (hybrid if available, else fts).
             limit: Maximum number of results (1-100).
             token_budget: Maximum tokens for the response.
         """
@@ -539,7 +542,69 @@ def register_tools(mcp: Any, store: Any, analyzer: Any) -> None:
             token_budget = min(max(token_budget, 500), 16000)
             limit = min(max(limit, 1), 100)
 
-            # If node_types specified, search for each type
+            # Determine effective search mode
+            effective_mode = mode.lower() if mode else "auto"
+            use_semantic = False
+            vector_dir = os.path.dirname(store._db_path)
+
+            if effective_mode in ("semantic", "hybrid", "auto"):
+                try:
+                    from coderag.search import SEMANTIC_AVAILABLE
+                    if SEMANTIC_AVAILABLE:
+                        from coderag.search.vector_store import VectorStore
+                        if VectorStore.exists(vector_dir):
+                            use_semantic = True
+                except ImportError:
+                    pass
+
+            if use_semantic and effective_mode != "fts":
+                from coderag.search.embedder import CodeEmbedder
+                from coderag.search.vector_store import VectorStore
+                from coderag.search.hybrid import HybridSearcher
+
+                embedder = CodeEmbedder("all-MiniLM-L6-v2")
+                vs = VectorStore.load(vector_dir)
+                searcher = HybridSearcher(store, vs, embedder)
+
+                kind_filter = node_types[0] if node_types and len(node_types) == 1 else None
+                if effective_mode == "semantic":
+                    search_results = searcher.search_semantic(query, k=limit, kind=kind_filter)
+                else:
+                    search_results = searcher.search(query, k=limit, alpha=0.5, kind=kind_filter)
+
+                # Filter by language if specified
+                if language:
+                    lang_lower = language.lower()
+                    search_results = [sr for sr in search_results if sr.language.lower() == lang_lower]
+
+                if not search_results:
+                    return (
+                        f"No results found for `{query}`"
+                        + (f" (types: {node_types})" if node_types else "")
+                        + (f" (language: {language})" if language else "")
+                        + f" (mode: {effective_mode})"
+                        + ".\n\nTry a broader search or different terms."
+                    )
+
+                mode_label = effective_mode if effective_mode != "auto" else "hybrid"
+                lines = [
+                    f"## Search results for `{query}` (mode: {mode_label})\n",
+                    f"**Found**: {len(search_results)} results\n",
+                ]
+
+                for i, sr in enumerate(search_results, 1):
+                    lines.append(
+                        f"{i}. **`{sr.qualified_name or sr.name}`** ({sr.kind}, {sr.language})  "
+                        f"  `{sr.file_path}` — score: {sr.score:.4f} [{sr.match_type}]"
+                    )
+                    if sr.vector_similarity > 0:
+                        lines.append(f"   > Semantic similarity: {sr.vector_similarity:.4f}")
+                    lines.append("")
+
+                text = "\n".join(lines)
+                return _truncate_to_budget(text, token_budget)
+
+            # FTS5 fallback
             results: list[Node] = []
             if node_types:
                 for nt in node_types:

@@ -307,6 +307,15 @@ class SQLiteStore:
         ).fetchone()
         return self._row_to_node(row) if row else None
 
+    def get_all_nodes(self) -> list[Node]:
+        """Return every node in the graph.
+
+        Used by the semantic embedding pipeline to build the vector index.
+        Nodes are returned in insertion order (rowid).
+        """
+        rows = self.connection.execute("SELECT * FROM nodes").fetchall()
+        return [self._row_to_node(r) for r in rows]
+
     def find_nodes(
         self,
         kind: NodeKind | None = None,

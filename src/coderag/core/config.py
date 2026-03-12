@@ -73,6 +73,12 @@ _DEFAULT_PERFORMANCE: dict[str, Any] = {
     "max_file_size_bytes": 1_000_000,
 }
 
+_DEFAULT_SEMANTIC: dict[str, Any] = {
+    "enabled": True,
+    "model": "all-MiniLM-L6-v2",
+    "batch_size": 128,
+}
+
 
 # =============================================================================
 # CONFIGURATION DATACLASS
@@ -122,6 +128,9 @@ class CodeGraphConfig:
     )
     performance: dict[str, Any] = field(
         default_factory=lambda: dict(_DEFAULT_PERFORMANCE)
+    )
+    semantic: dict[str, Any] = field(
+        default_factory=lambda: dict(_DEFAULT_SEMANTIC)
     )
 
     # ── Factory Methods ───────────────────────────────────────
@@ -193,6 +202,10 @@ class CodeGraphConfig:
                 _DEFAULT_PERFORMANCE,
                 raw.get("performance", {}),
             ),
+            semantic=_deep_merge(
+                _DEFAULT_SEMANTIC,
+                raw.get("semantic", {}),
+            ),
         )
 
         config.validate()
@@ -250,6 +263,22 @@ class CodeGraphConfig:
         """Default detail level for output formatting."""
         return str(self.output.get("default_detail_level", "signatures"))
 
+    @property
+    def semantic_enabled(self) -> bool:
+        """Whether semantic search is enabled."""
+        return bool(self.semantic.get("enabled", True))
+
+    @property
+    def semantic_model(self) -> str:
+        """Sentence-transformer model name for embeddings."""
+        return str(self.semantic.get("model", "all-MiniLM-L6-v2"))
+
+    @property
+    def semantic_batch_size(self) -> int:
+        """Batch size for embedding operations."""
+        return int(self.semantic.get("batch_size", 128))
+
+
     # ── Validation ────────────────────────────────────────────
 
     def validate(self) -> None:
@@ -293,6 +322,7 @@ class CodeGraphConfig:
             "enrichment": self.enrichment,
             "output": self.output,
             "performance": self.performance,
+            "semantic": self.semantic,
         }
 
     def to_yaml(self, path: str) -> None:
