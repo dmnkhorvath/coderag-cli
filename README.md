@@ -7,9 +7,9 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Tests: 165 passing](https://img.shields.io/badge/tests-165%20passing-brightgreen.svg)](#-testing)
-[![Lines: 19K+](https://img.shields.io/badge/lines-19K%2B-informational.svg)](#-codebase-stats)
+[![Lines: 32K+](https://img.shields.io/badge/lines-32K%2B-informational.svg)](#-codebase-stats)
 
-*Parse PHP, JavaScript, and TypeScript codebases into rich knowledge graphs with framework detection, cross-language analysis, and MCP server integration for AI-powered code understanding.*
+*Parse PHP, JavaScript, TypeScript, Python, CSS, and SCSS codebases into rich knowledge graphs with framework detection, cross-language analysis, and MCP server integration for AI-powered code understanding.*
 
 </div>
 
@@ -39,21 +39,31 @@
 - **PHP** — Classes, interfaces, traits, enums, functions, methods, properties, constants, namespaces
 - **JavaScript** — ES modules, CommonJS, JSX, classes, functions, arrow functions, React components
 - **TypeScript** — Interfaces, type aliases, enums, generics, decorators, TSX, ambient declarations
+- **Python** — Classes, functions, decorators, async/await, type hints, dataclasses, imports
+- **CSS** — Class selectors, ID selectors, custom properties (variables), @keyframes, @media queries, @layer, @font-face, @import
+- **SCSS** — Variables ($var), mixins (@mixin/@include), functions (@function), placeholders (%placeholder), @use/@forward module system, nesting
 
 ### 🔍 Deep Code Analysis
-- **25 node types** and **30 edge types** for comprehensive code modeling
+- **41 node types** and **50 edge types** for comprehensive code modeling
 - **Cross-file reference resolution** with multi-strategy matching (exact → suffix → short name)
 - **Cross-language API matching** — PHP routes ↔ JavaScript fetch calls
+- **Cross-language style edges** — Component→stylesheet imports, CSS Module imports, className→class matching, JS↔CSS variable bridges, Tailwind class→theme token matching
 - **Graph algorithms** — PageRank, community detection, blast radius, circular dependency detection
 - **Git metadata enrichment** — Change frequency, co-change analysis, code ownership
 - **PHPStan type enrichment** — Static analysis integration for richer type information
 
 ### 🏗️ Framework Detection
 - **Laravel** — Routes, models, middleware, events, Blade templates
+- **Symfony** — Routes, services, Doctrine ORM, Twig templates
 - **React** — Components, hooks, context providers/consumers
 - **Express.js** — Routes, middleware chains, error handlers
 - **Next.js** — File-based routing, server/client components, API routes
 - **Vue** — Single-file components, Composition API, Pinia stores
+- **Angular** — Decorators, modules, dependency injection, routing
+- **Django** — Views, models, URL patterns, template tags
+- **Flask** — Routes, blueprints, extensions
+- **FastAPI** — Path operations, dependency injection, Pydantic models
+- **Tailwind CSS** — v3 config parsing + v4 CSS-first (@theme, @source, @utility, @custom-variant), theme tokens, @apply edges
 
 ### 🤖 MCP Server Integration
 - **8 tools** for AI agents to query the knowledge graph
@@ -167,7 +177,7 @@ Query the knowledge graph for symbols and relationships.
 ```bash
 coderag query --name "User" .                   # Search by name
 coderag query --name "UserController" --kind class .  # Filter by kind
-coderag query --name "App\Models\User" --depth 2 .    # Traverse neighbors
+coderag query --name "App\\Models\\User" --depth 2 .    # Traverse neighbors
 ```
 
 ### `coderag export`
@@ -257,7 +267,7 @@ CodeRAG includes a full [Model Context Protocol](https://modelcontextprotocol.io
 
 | Tool | Description | Key Parameters |
 |------|-------------|----------------|
-| `coderag_lookup_symbol` | Look up a symbol's definition, relationships, and context | `symbol`, `detail_level`, `token_budget` |
+| `coderag_lookup_symbol` | Look up a symbol\'s definition, relationships, and context | `symbol`, `detail_level`, `token_budget` |
 | `coderag_find_usages` | Find all usages of a symbol (calls, imports, extends, etc.) | `symbol`, `usage_types`, `max_depth` |
 | `coderag_impact_analysis` | Analyze blast radius of changing a symbol | `symbol`, `max_depth`, `token_budget` |
 | `coderag_file_context` | Get all symbols and relationships in a file | `file_path`, `token_budget` |
@@ -293,7 +303,7 @@ Add to your `claude_desktop_config.json`:
 
 ## 🏗️ Framework Detection
 
-CodeRAG automatically detects and enriches framework-specific patterns:
+CodeRAG automatically detects and enriches framework-specific patterns across **11 framework detectors**:
 
 ### Laravel (PHP)
 - Route definitions (`Route::get`, `Route::resource`, etc.)
@@ -301,6 +311,13 @@ CodeRAG automatically detects and enriches framework-specific patterns:
 - Middleware registration
 - Event/listener patterns
 - Blade template references
+
+### Symfony (PHP)
+- Route definitions (PHP 8 attributes, YAML, XML config)
+- Service container and dependency injection
+- Doctrine ORM entity mapping
+- Twig template references
+- Event dispatcher patterns
 
 ### React (JavaScript/TypeScript)
 - Functional and class components
@@ -316,7 +333,7 @@ CodeRAG automatically detects and enriches framework-specific patterns:
 
 ### Next.js (JavaScript/TypeScript)
 - File-based routing (pages and app directory)
-- Server and client components (`'use server'`, `'use client'`)
+- Server and client components (`\'use server\'`, `\'use client\'`)
 - API routes
 - Middleware
 - Dynamic routes and route groups
@@ -326,6 +343,35 @@ CodeRAG automatically detects and enriches framework-specific patterns:
 - Composition API (`ref`, `computed`, `watch`)
 - Pinia store detection
 - Component registration
+
+### Angular (TypeScript)
+- Component, Module, Injectable decorators
+- Dependency injection via constructors
+- Routing module configuration
+- Standalone components and signals
+
+### Django (Python)
+- URL patterns and path definitions
+- Model classes and field relationships
+- View functions and class-based views
+- Template tag detection
+
+### Flask (Python)
+- Route decorators and blueprints
+- Extension detection
+- Application factory patterns
+
+### FastAPI (Python)
+- Path operation decorators
+- Dependency injection with `Depends()`
+- Pydantic model integration
+- Router mounting
+
+### Tailwind CSS
+- **v3**: `tailwind.config.js/ts/cjs/mjs` parsing, `@tailwind` directives, `content` path scanning
+- **v4**: CSS-first configuration with `@import \'tailwindcss\'`, `@theme` blocks, `@source`, `@utility`, `@custom-variant`
+- Theme token extraction and `@apply` edge detection
+- Cross-language Tailwind class→theme token matching
 
 ---
 
@@ -362,6 +408,15 @@ languages:
   typescript:
     enabled: true
     extensions: [".ts", ".tsx"]
+  python:
+    enabled: true
+    extensions: [".py"]
+  css:
+    enabled: true
+    extensions: [".css"]
+  scss:
+    enabled: true
+    extensions: [".scss"]
 
 storage:
   backend: sqlite
@@ -398,6 +453,7 @@ Generate a default config with `coderag init`.
 │  Phase 4: Resolution   → Cross-file reference resolution     │
 │  Phase 5: Frameworks   → Framework pattern detection         │
 │  Phase 6: Cross-lang   → PHP route ↔ JS API call matching    │
+│  Phase 6b: Style edges → Component ↔ stylesheet matching     │
 │  Phase 7: Enrichment   → Git metadata + PHPStan types        │
 │  Phase 8: Persistence  → SQLite batch upsert                 │
 ├─────────────────────────────────────────────────────────────┤
@@ -406,10 +462,17 @@ Generate a default config with `coderag init`.
 │  │   PHP    │  │  JavaScript  │  │   TypeScript   │         │
 │  │ Extractor│  │  Extractor   │  │   Extractor    │         │
 │  │ Resolver │  │  Resolver    │  │   Resolver     │         │
-│  │ Laravel  │  │  React       │  │                │         │
-│  │          │  │  Express     │  │                │         │
+│  │ Laravel  │  │  React       │  │   Angular      │         │
+│  │ Symfony  │  │  Express     │  │                │         │
 │  │          │  │  Next.js     │  │                │         │
 │  │          │  │  Vue         │  │                │         │
+│  ├──────────┤  ├──────────────┤  ├────────────────┤         │
+│  │  Python  │  │     CSS      │  │     SCSS       │         │
+│  │ Extractor│  │  Extractor   │  │   Extractor    │         │
+│  │ Resolver │  │  Resolver    │  │   Resolver     │         │
+│  │ Django   │  │  Tailwind    │  │                │         │
+│  │ Flask    │  │              │  │                │         │
+│  │ FastAPI  │  │              │  │                │         │
 │  └──────────┘  └──────────────┘  └────────────────┘         │
 ├─────────────────────────────────────────────────────────────┤
 │                    Storage & Analysis                         │
@@ -424,14 +487,17 @@ Generate a default config with `coderag init`.
 
 | Component | Description | Lines |
 |-----------|-------------|-------|
-| `core/models.py` | 25 node types, 30 edge types, data models | ~500 |
+| `core/models.py` | 41 node types, 50 edge types, data models | ~500 |
 | `core/config.py` | YAML configuration system | ~350 |
 | `core/registry.py` | Plugin ABCs and registry | ~200 |
-| `plugins/php/` | PHP extractor, resolver, Laravel detector | ~1,500 |
+| `plugins/php/` | PHP extractor, resolver, Laravel & Symfony detectors | ~1,500 |
 | `plugins/javascript/` | JS extractor, resolver, React/Express/Next.js/Vue | ~2,500 |
-| `plugins/typescript/` | TS extractor with interfaces, generics, decorators | ~2,800 |
+| `plugins/typescript/` | TS extractor with interfaces, generics, Angular detector | ~2,800 |
+| `plugins/python/` | Python extractor, resolver, Django/Flask/FastAPI detectors | ~2,000 |
+| `plugins/css/` | CSS extractor, resolver, Tailwind detector | ~1,500 |
+| `plugins/scss/` | SCSS extractor, resolver (variables, mixins, functions) | ~1,900 |
+| `pipeline/` | 8-phase orchestrator, scanner, resolver, style edge matcher | ~2,100 |
 | `storage/sqlite_store.py` | SQLite backend with FTS5 and WAL mode | ~800 |
-| `pipeline/` | 8-phase orchestrator, scanner, resolver | ~1,500 |
 | `analysis/` | NetworkX graph algorithms | ~500 |
 | `mcp/` | MCP server, tools, resources | ~1,200 |
 | `export/` | Multi-format graph exporter | ~600 |
@@ -470,7 +536,7 @@ The extractor receives file content and returns an `ExtractionResult` with nodes
 class MyExtractor(ASTExtractor):
     def extract(self, file_path: Path, source: bytes) -> ExtractionResult:
         # Parse AST, create Node and Edge objects
-        nodes = [...]  
+        nodes = [...]
         edges = [...]
         return ExtractionResult(nodes=nodes, edges=edges)
 ```
@@ -497,16 +563,37 @@ class MyExtractor(ASTExtractor):
 | flarum | 1,982 | 18,204 | 45,178 | PHP, JS, TS | — |
 | bagisto | 1,847 | 17,167 | 47,171 | PHP, JS | Laravel |
 
+### CSS / SCSS / Tailwind Repositories
+
+| Project | Type | Files | Nodes | Edges | Time (s) | Queries |
+|---------|------|-------|-------|-------|----------|---------|
+| normalize.css | CSS | 1 | 1 | 0 | 0.4 | 0/3 |
+| animate.css | CSS | 117 | 1,424 | 1,933 | 1.6 | 3/3 |
+| pure-css | CSS | 57 | 1,171 | 2,368 | 1.1 | 3/3 |
+| Bootstrap | SCSS | 281 | 20,854 | 35,094 | 27.3 | 3/3 |
+| Bulma | SCSS | 236 | 11,267 | 15,503 | 21.4 | 3/3 |
+| Foundation | SCSS | 301 | 18,040 | 33,519 | 11.6 | 3/3 |
+| Tailwind Landing | Tailwind | 26 | 195 | 313 | 0.6 | 3/3 |
+| Flowbite | Tailwind | 77 | 3,108 | 4,481 | 2.0 | 3/3 |
+| DaisyUI | Tailwind | 246 | 2,615 | 5,201 | 3.5 | 3/3 |
+| Excalidraw | Mixed | 714 | 8,379 | 24,931 | 10.9 | 3/3 |
+| Cal.com | Mixed | 7,488 | 53,762 | 165,642 | 180.1 | 3/3 |
+| Shadcn/ui | Mixed | 4,552 | 21,571 | 117,744 | 111.0 | 3/3 |
+| **Totals** | | **14,096** | **142,387** | **406,729** | **384.2** | **33/36** |
+
+> 17 distinct style-specific edge types detected across all styling benchmarks. Full report: [docs/benchmark-styling.md](docs/benchmark-styling.md)
+
 ### Combined Totals
 
 | Metric | Value |
 |--------|-------|
-| **Repositories benchmarked** | 39 |
-| **Total files parsed** | 97,713 |
-| **Total nodes extracted** | 1,156,410 |
-| **Total edges created** | 2,755,421 |
-| **Query accuracy** | 97–100% |
+| **Repositories benchmarked** | 51 |
+| **Total files parsed** | 111,809 |
+| **Total nodes extracted** | ~1,298,797 |
+| **Total edges created** | ~3,162,150 |
+| **Query accuracy** | 91.7–100% |
 | **Cross-language edges** | Detected in all mixed repos |
+| **Style-specific edge types** | 17 |
 
 ### Performance Targets
 
@@ -532,7 +619,7 @@ python -m pytest tests/ --cov=coderag --cov-report=term-missing
 python -m pytest tests/test_enrichment.py -v
 ```
 
-**Test suite:** 165 tests across 8 test files covering models, config, storage, pipeline, export, hot-reload, framework detection, and PHPStan enrichment.
+**Test suite:** 165 tests across 10 test files covering models, config, storage, pipeline, export, hot-reload, framework detection, PHPStan enrichment, and CSS/SCSS parsing.
 
 ---
 
@@ -540,22 +627,22 @@ python -m pytest tests/test_enrichment.py -v
 
 | Metric | Value |
 |--------|-------|
-| **Total lines of code** | 19,300+ |
-| **Python source files** | 50+ |
-| **Test files** | 8 |
+| **Total lines of code** | 32,200+ |
+| **Python source files** | 75+ |
+| **Test files** | 10 |
 | **Tests passing** | 165 |
-| **Language plugins** | 3 (PHP, JS, TS) |
-| **Framework detectors** | 5 (Laravel, React, Express, Next.js, Vue) |
+| **Language plugins** | 6 (PHP, JS, TS, Python, CSS, SCSS) |
+| **Framework detectors** | 11 (Laravel, Symfony, React, Express, Next.js, Vue, Angular, Django, Flask, FastAPI, Tailwind CSS) |
 | **MCP tools** | 8 |
 | **MCP resources** | 3 |
-| **Node types** | 25 |
-| **Edge types** | 30 |
+| **Node types** | 41 |
+| **Edge types** | 50 |
 
 ---
 
 ## 🤝 Contributing
 
-Contributions are welcome! Here's how to get started:
+Contributions are welcome! Here\'s how to get started:
 
 ```bash
 # Clone and set up development environment
@@ -577,7 +664,7 @@ mypy src/coderag/
 
 ### Areas for Contribution
 - 🌐 New language plugins (Go, Rust, Java, C#)
-- 🏗️ Additional framework detectors (Django, Spring, Angular, Svelte)
+- 🏗️ Additional framework detectors (NestJS, Svelte, Nuxt)
 - 📊 New graph analysis algorithms
 - 🧪 Additional test coverage
 - 📖 Documentation improvements
