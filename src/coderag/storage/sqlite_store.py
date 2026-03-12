@@ -553,7 +553,7 @@ class SQLiteStore:
         kind_params: list[Any] = []
         if edge_kinds:
             placeholders = ",".join("?" * len(edge_kinds))
-            kind_filter = f" AND kind IN ({placeholders})"
+            kind_filter = f" AND e.kind IN ({placeholders})"
             kind_params = [
                 ek.value if isinstance(ek, EdgeKind) else ek for ek in edge_kinds
             ]

@@ -929,6 +929,107 @@ def cross_language(ctx: click.Context, fmt: str, min_confidence: float) -> None:
 
 # ── serve ─────────────────────────────────────────────────────
 
+
+@cli.command()
+@click.option(
+    "--format", "-f",
+    type=click.Choice(["markdown", "json", "tree"]),
+    default="markdown",
+    help="Output format (default: markdown).",
+)
+@click.option(
+    "--scope", "-s",
+    type=click.Choice(["full", "architecture", "file", "symbol"]),
+    default="architecture",
+    help="Export scope (default: architecture).",
+)
+@click.option(
+    "--symbol",
+    default=None,
+    help="Symbol name (required for symbol scope).",
+)
+@click.option(
+    "--file",
+    "file_path",
+    default=None,
+    help="File path (required for file scope).",
+)
+@click.option(
+    "--tokens",
+    default=8000,
+    type=int,
+    help="Token budget for output (default: 8000).",
+)
+@click.option(
+    "--top",
+    default=20,
+    type=int,
+    help="Top N items for architecture scope (default: 20).",
+)
+@click.option(
+    "--depth",
+    default=2,
+    type=int,
+    help="Traversal depth for symbol scope (default: 2).",
+)
+@click.option(
+    "--output", "-o",
+    default=None,
+    type=click.Path(),
+    help="Output file path (default: stdout).",
+)
+@click.pass_context
+def export(ctx: click.Context, format: str, scope: str, symbol: str | None,
+           file_path: str | None, tokens: int, top: int, depth: int,
+           output: str | None) -> None:
+    """Export knowledge graph in various formats for LLM consumption.
+
+    Supports markdown, JSON, and tree formats with configurable scopes
+    (full, architecture, file, symbol) and token budgeting.
+
+    Examples:
+
+      coderag export                          # architecture overview in markdown
+
+      coderag export -f json -s full          # full graph as JSON
+
+      coderag export -s symbol --symbol User  # symbol context
+
+      coderag export -s file --file app/User.php  # file context
+
+      coderag export -f tree -s full          # repo map tree view
+
+      coderag export --tokens 16000 -o out.md # larger budget, save to file
+    """
+    from coderag.export import GraphExporter, ExportOptions
+
+    config = ctx.obj["config"]
+    store = _open_store(config)
+
+    try:
+        options = ExportOptions(
+            format=format,
+            scope=scope,
+            symbol=symbol,
+            file_path=file_path,
+            max_tokens=tokens,
+            top_n=top,
+            depth=depth,
+        )
+        exporter = GraphExporter(store)
+        result = exporter.export(options)
+
+        if output:
+            import os
+            os.makedirs(os.path.dirname(output) if os.path.dirname(output) else ".", exist_ok=True)
+            with open(output, "w") as f:
+                f.write(result)
+            click.echo(f"Exported to {output} ({len(result)} chars, ~{len(result) // 4} tokens)", err=True)
+        else:
+            click.echo(result)
+    finally:
+        store.close()
+
 @cli.command()
 @click.argument("project_dir", default=".", type=click.Path(exists=True))
 @click.option(
@@ -937,8 +1038,14 @@ def cross_language(ctx: click.Context, fmt: str, min_confidence: float) -> None:
     type=click.Path(),
     help="Override path to graph database (default: PROJECT_DIR/.codegraph/graph.db).",
 )
+@click.option(
+    "--no-reload",
+    is_flag=True,
+    default=False,
+    help="Disable hot-reload (auto-reload when database changes).",
+)
 @click.pass_context
-def serve(ctx: click.Context, project_dir: str, db: str | None) -> None:
+def serve(ctx: click.Context, project_dir: str, db: str | None, no_reload: bool) -> None:
     """Start MCP server for LLM tool integration.
 
     Exposes the knowledge graph as MCP tools that LLMs can call
@@ -946,6 +1053,10 @@ def serve(ctx: click.Context, project_dir: str, db: str | None) -> None:
 
     Uses stdio transport (for Claude Code, Cursor, etc.).
     Diagnostic messages are printed to stderr.
+
+    By default, the server watches the database file for changes and
+    automatically reloads when it detects a re-parse. Use --no-reload
+    to disable this behavior.
 
     PROJECT_DIR is the project root directory (default: current directory).
     """
@@ -955,7 +1066,7 @@ def serve(ctx: click.Context, project_dir: str, db: str | None) -> None:
     db_override = db or ctx.obj.get("db_override")
 
     from coderag.mcp.server import run_stdio_server
-    run_stdio_server(resolved_dir, db_override)
+    run_stdio_server(resolved_dir, db_override, hot_reload=not no_reload)
 
 # ── Entry Point ───────────────────────────────────────────────
 
