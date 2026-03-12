@@ -8,9 +8,10 @@ from typing import Any
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal
+from textual.events import Key
 from textual.reactive import reactive
 from textual.widget import Widget
-from textual.widgets import Static
+from textual.widgets import Input, Static
 from textual.worker import Worker, WorkerState
 
 from coderag.pipeline.events import (
@@ -31,6 +32,7 @@ from coderag.tui.screens.details import DetailsScreen
 from coderag.tui.screens.graph import GraphScreen
 from coderag.tui.screens.help import HelpScreen
 from coderag.tui.screens.logs import LogsScreen
+from coderag.tui.screens.summary import SummaryScreen
 from coderag.tui.widgets import (
     FilterableLog,
     MetricCard,
@@ -161,10 +163,10 @@ class CodeRAGFooter(Widget):
     active_screen: reactive[str] = reactive("dashboard")
 
     _HINTS: dict[str, str] = {
-        "dashboard": "j/k:Scroll  f:Follow  d/i/w/e:Filter  a:All  1-4:Screens  ?:Help  q:Quit",
-        "logs": "j/k:Scroll  /:Search  n/N:Next/Prev  f:Follow  d/i/w/e:Filter  s:Save  y:Yank  q:Quit",
-        "details": "j/k:Scroll  h/l:Tab  Tab:Next  g/G:Top/Bottom  1-4:Screens  q:Quit",
-        "graph": "j/k:Scroll  h/l:Tab  r:Refresh  g/G:Top/Bottom  1-4:Screens  q:Quit",
+        "dashboard": "j/k:Scroll  gg/G:Top/Bot  f:Follow  d/i/w/e:Filter  a:All  ::Cmd  1-4:Screens  ?:Help  q:Quit",
+        "logs": "j/k:Scroll  gg/G:Top/Bot  /:Search  n/N:Next/Prev  f:Follow  d/i/w/e:Filter  ::Cmd  q:Quit",
+        "details": "j/k:Scroll  h/l:Tab  gg/G:Top/Bot  ::Cmd  1-4:Screens  q:Quit",
+        "graph": "j/k:Scroll  h/l:Tab  gg/G:Top/Bot  r:Refresh  ::Cmd  1-4:Screens  q:Quit",
     }
 
     def render(self) -> str:
@@ -203,7 +205,7 @@ class CodeRAGApp(App):
         Binding("w", "filter_warn", "Filter Warn", show=False),
         Binding("e", "filter_error", "Filter Error", show=False),
         Binding("a", "filter_all", "Show All", show=False),
-        Binding("g", "scroll_home", "Scroll Home", show=False),
+        # NOTE: 'g' handled via on_key for gg two-key sequence
         Binding("G", "scroll_end", "Scroll End", show=False),
         Binding("ctrl+d", "half_page_down", "Half Page Down", show=False),
         Binding("ctrl+u", "half_page_up", "Half Page Up", show=False),
@@ -211,16 +213,12 @@ class CodeRAGApp(App):
         Binding("ctrl+b", "full_page_up", "Full Page Up", show=False),
     ]
 
-    # Named screens for install_screen
-
-
     def __init__(
         self,
         project_root: str,
         config_path: str | None = None,
         **kwargs: Any,
     ) -> None:
-        # Accept both project_root and project_dir for compatibility
         super().__init__(**kwargs)
         self.project_root = project_root
         self.config_path = config_path
@@ -246,7 +244,16 @@ class CodeRAGApp(App):
         # Current screen name
         self._active_screen_name: str = "dashboard"
 
-    # Accept project_dir as alias
+        # gg two-key sequence state
+        self._g_pending: bool = False
+        self._g_timer: object | None = None
+
+        # Command mode state
+        self._command_mode: bool = False
+
+        # Detected languages (for summary)
+        self._detected_languages: set[str] = set()
+
     @property
     def project_dir(self) -> str:
         return self.project_root
@@ -271,13 +278,175 @@ class CodeRAGApp(App):
         self._running = True
         self.run_worker(self._run_pipeline, thread=True, name="pipeline")
 
+    # ── Key Handling (gg sequence & command mode) ─────────────
+
+    def on_key(self, event: Key) -> None:
+        """Handle special key sequences before normal binding dispatch."""
+        # If command input is focused, let it handle keys normally
+        if self._command_mode:
+            if event.key == "escape":
+                event.prevent_default()
+                event.stop()
+                self._exit_command_mode()
+            return
+
+        # ':' enters command mode
+        if event.key == "colon":
+            event.prevent_default()
+            event.stop()
+            self._enter_command_mode()
+            return
+
+        # gg two-key sequence
+        if event.key == "g":
+            event.prevent_default()
+            event.stop()
+            if self._g_pending:
+                # Second g — scroll to top
+                self._cancel_g_timer()
+                self._g_pending = False
+                self.action_scroll_home()
+            else:
+                # First g — start timer
+                self._g_pending = True
+                self._g_timer = self.set_timer(0.5, self._g_timeout)
+            return
+
+        # Any other key cancels pending g
+        if self._g_pending:
+            self._cancel_g_timer()
+            self._g_pending = False
+
+    def _g_timeout(self) -> None:
+        """Timer expired without second g press."""
+        self._g_pending = False
+        self._g_timer = None
+
+    def _cancel_g_timer(self) -> None:
+        """Cancel the pending g timer."""
+        if self._g_timer is not None:
+            try:
+                self._g_timer.stop()
+            except Exception:
+                pass
+            self._g_timer = None
+
+    # ── Command Mode ──────────────────────────────────────────
+
+    def _enter_command_mode(self) -> None:
+        """Show command input at the bottom of the screen."""
+        self._command_mode = True
+        try:
+            footer = self.query_one(CodeRAGFooter)
+            footer.display = False
+        except Exception:
+            pass
+        cmd_input = Input(
+            placeholder="Enter command (:q :w :filter <level> :set wrap/nowrap)",
+            id="command-input",
+        )
+        cmd_input.styles.dock = "bottom"
+        cmd_input.styles.height = 1
+        cmd_input.styles.background = "#0f172a"
+        cmd_input.styles.color = "#e2e8f0"
+        self.mount(cmd_input)
+        cmd_input.focus()
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        """Handle command input submission."""
+        if event.input.id != "command-input":
+            return
+        cmd = event.value.strip()
+        self._exit_command_mode()
+        self._execute_command(cmd)
+
+    def _exit_command_mode(self) -> None:
+        """Remove command input and restore footer."""
+        self._command_mode = False
+        try:
+            cmd_input = self.query_one("#command-input", Input)
+            cmd_input.remove()
+        except Exception:
+            pass
+        try:
+            footer = self.query_one(CodeRAGFooter)
+            footer.display = True
+        except Exception:
+            pass
+
+    def _execute_command(self, cmd: str) -> None:
+        """Parse and execute a vim-style command."""
+        if not cmd:
+            return
+
+        if cmd in ("q", "quit", "q!"):
+            self.exit()
+        elif cmd in ("w", "write", "save"):
+            self._save_logs()
+        elif cmd.startswith("filter "):
+            level = cmd[7:].strip().upper()
+            if level in ("DEBUG", "INFO", "WARN", "WARNING", "ERROR", "ALL"):
+                if level == "ALL":
+                    self.action_filter_all()
+                elif level == "WARNING":
+                    self.action_filter_warn()
+                else:
+                    getattr(self, f"action_filter_{level.lower()}", lambda: None)()
+                self._post_log(f"Filter set to: {level}", "INFO")
+            else:
+                self._post_log(f"Unknown filter level: {level}", "WARN")
+        elif cmd == "set wrap":
+            self._post_log("Line wrapping enabled", "INFO")
+            try:
+                log = self.screen.query_one(FilterableLog)
+                log.styles.overflow_x = "auto"
+            except Exception:
+                pass
+        elif cmd == "set nowrap":
+            self._post_log("Line wrapping disabled", "INFO")
+            try:
+                log = self.screen.query_one(FilterableLog)
+                log.styles.overflow_x = "scroll"
+            except Exception:
+                pass
+        elif cmd.startswith("screen ") or cmd.startswith("s "):
+            parts = cmd.split(None, 1)
+            if len(parts) == 2:
+                name = parts[1].strip()
+                screen_map = {"1": "dashboard", "2": "logs", "3": "details", "4": "graph"}
+                target = screen_map.get(name, name)
+                if target in ("dashboard", "logs", "details", "graph"):
+                    self._switch_screen(target)
+        else:
+            self._post_log(f"Unknown command: :{cmd}", "WARN")
+
+    def _save_logs(self) -> None:
+        """Save current log buffer to file."""
+        try:
+            log_path = Path(self.project_root) / ".codegraph" / "monitor.log"
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(log_path, "w") as f:
+                for text, level in self._shared_log_buffer:
+                    f.write(f"[{level}] {text}\n")
+            self._post_log(f"Logs saved to {log_path}", "SUCCESS")
+        except Exception as exc:
+            self._post_log(f"Failed to save logs: {exc}", "ERROR")
+
+    def key_escape(self) -> None:
+        """Handle Escape key."""
+        if self._command_mode:
+            self._exit_command_mode()
+        elif isinstance(self.screen, HelpScreen):
+            self.screen.dismiss()
+        elif isinstance(self.screen, SummaryScreen):
+            self.screen.dismiss()
+
     # ── Screen Navigation ─────────────────────────────────────
 
     def _switch_screen(self, name: str) -> None:
         """Switch to a named screen."""
         if self._active_screen_name == name:
             return
-        # If help modal is showing, pop it first
         if isinstance(self.screen, HelpScreen):
             self.pop_screen()
         self.switch_screen(name)
@@ -307,7 +476,6 @@ class CodeRAGApp(App):
         else:
             self.push_screen(HelpScreen())
 
-
     # ── Pipeline Worker ───────────────────────────────────────
 
     def _run_pipeline(self) -> None:
@@ -317,24 +485,20 @@ class CodeRAGApp(App):
         from coderag.storage.sqlite_store import SQLiteStore
         from coderag.pipeline.orchestrator import PipelineOrchestrator
 
-        # Create event emitter and subscribe
         emitter = EventEmitter()
         emitter.on_any(self._on_pipeline_event)
 
         try:
-            # Load config
             if self.config_path:
                 config = CodeGraphConfig.from_yaml(self.config_path)
             else:
                 config = CodeGraphConfig.default()
 
-            # Set up project
             project_root = Path(self.project_root).resolve()
             db_dir = project_root / ".codegraph"
             db_dir.mkdir(parents=True, exist_ok=True)
             db_path = db_dir / "graph.db"
 
-            # Initialize components
             registry = PluginRegistry()
             registry.discover_plugins()
             store = SQLiteStore(str(db_path))
@@ -348,7 +512,6 @@ class CodeRAGApp(App):
                 )
                 summary = orchestrator.run(str(project_root))
 
-            # Signal completion
             self.call_from_thread(
                 self._post_log, "Pipeline completed successfully!", "SUCCESS"
             )
@@ -427,9 +590,11 @@ class CodeRAGApp(App):
                 f"{short_path} ({event.nodes_count} nodes, {event.edges_count} edges)",
                 "SUCCESS",
             )
-            # Update shared file details
+            lang = getattr(event, "language", "?")
+            if lang and lang != "?":
+                self._detected_languages.add(lang)
             self._shared_file_details[event.file_path] = {
-                "language": getattr(event, "language", "?"),
+                "language": lang,
                 "nodes_count": event.nodes_count,
                 "edges_count": event.edges_count,
                 "parse_time_ms": getattr(event, "parse_time_ms", 0.0),
@@ -438,7 +603,6 @@ class CodeRAGApp(App):
                 "error": "",
             }
             self._update_metrics()
-            # Refresh details screen if active
             self._refresh_details_screen()
 
         elif isinstance(event, FileError):
@@ -446,7 +610,6 @@ class CodeRAGApp(App):
             self._post_log(
                 f"{event.file_path}: {event.error}", "ERROR"
             )
-            # Update shared file details with error
             self._shared_file_details[event.file_path] = {
                 "language": "?",
                 "nodes_count": 0,
@@ -474,19 +637,16 @@ class CodeRAGApp(App):
 
     def _post_log(self, text: str, level: str = "INFO") -> None:
         """Write a message to the filterable log and shared buffer."""
-        # Add to shared buffer (capped at 10000 entries)
         self._shared_log_buffer.append((text, level))
         if len(self._shared_log_buffer) > 10000:
             self._shared_log_buffer = self._shared_log_buffer[-5000:]
 
-        # Write to dashboard FilterableLog if visible
         try:
             log_widget = self.screen.query_one(FilterableLog)
             log_widget.write_log(text, level)
         except Exception:
             pass
 
-        # Write to LogsScreen if it exists and is active
         if isinstance(self.screen, LogsScreen):
             try:
                 self.screen.append_log(text, level)
@@ -494,12 +654,32 @@ class CodeRAGApp(App):
                 pass
 
     def _on_finished(self, success: bool, error: str) -> None:
-        """Handle pipeline completion."""
+        """Handle pipeline completion — show summary overlay."""
         self._running = False
         if success:
             self._update_header_state("✓ Complete")
         else:
             self._update_header_state("✗ Failed")
+
+        duration_s = time.time() - self._start_time if self._start_time else 0.0
+
+        summary = SummaryScreen(
+            success=success,
+            duration_s=duration_s,
+            files_parsed=self._files_processed,
+            errors=self._total_errors,
+            node_count=self._total_nodes,
+            edge_count=self._total_edges,
+            languages=sorted(self._detected_languages),
+        )
+
+        def _handle_summary_result(result: str | None) -> None:
+            if result == "browse":
+                self._switch_screen("graph")
+            elif result == "quit":
+                self.exit()
+
+        self.push_screen(summary, callback=_handle_summary_result)
 
     # ── Header Updates ────────────────────────────────────────
 
@@ -527,7 +707,6 @@ class CodeRAGApp(App):
         except Exception:
             pass
 
-        # Also update old-style header bar on dashboard if present
         try:
             if self._running:
                 status = "▶ Running"

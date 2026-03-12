@@ -28,11 +28,14 @@ Screen {
     layout: horizontal;
     padding: 0;
     margin: 0;
+    overflow-x: auto;
 }
 
 #metrics-row MetricCard {
     border: solid $coderag-border;
     height: 5;
+    min-width: 14;
+    width: 1fr;
 }
 
 #metrics-row MetricCard .metric-value {
@@ -97,4 +100,18 @@ Screen {
     background: $coderag-surface;
     color: $text-muted;
     padding: 0 1;
+}
+
+/* ── Command Input ──────────────────────────────────────────── */
+#command-input {
+    dock: bottom;
+    height: 1;
+    background: $coderag-surface;
+    color: $coderag-primary;
+    border: none;
+    display: none;
+}
+
+#command-input.visible {
+    display: block;
 }

@@ -6,7 +6,7 @@
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Tests: 165 passing](https://img.shields.io/badge/tests-165%20passing-brightgreen.svg)](#-testing)
+[![Tests: 165 passing](https://img.shields.io/badge/tests-271%20passing-brightgreen.svg)](#-testing)
 [![Lines: 32K+](https://img.shields.io/badge/lines-32K%2B-informational.svg)](#-codebase-stats)
 
 *Parse PHP, JavaScript, TypeScript, Python, CSS, and SCSS codebases into rich knowledge graphs with framework detection, cross-language analysis, and MCP server integration for AI-powered code understanding.*
@@ -20,6 +20,7 @@
 - [Features](#-features)
 - [Quick Start](#-quick-start)
 - [CLI Reference](#-cli-reference)
+- [TUI Monitor](#-tui-monitor)
 - [MCP Server](#-mcp-server)
 - [Framework Detection](#-framework-detection)
 - [Export Formats](#-export-formats)
@@ -33,39 +34,111 @@
 
 ---
 
-## ✨ Features
+## 🖥️ TUI Monitor
 
-### 🌐 Multi-Language Parsing
-- **PHP** — Classes, interfaces, traits, enums, functions, methods, properties, constants, namespaces
-- **JavaScript** — ES modules, CommonJS, JSX, classes, functions, arrow functions, React components
-- **TypeScript** — Interfaces, type aliases, enums, generics, decorators, TSX, ambient declarations
-- **Python** — Classes, functions, decorators, async/await, type hints, dataclasses, imports
-- **CSS** — Class selectors, ID selectors, custom properties (variables), @keyframes, @media queries, @layer, @font-face, @import
-- **SCSS** — Variables ($var), mixins (@mixin/@include), functions (@function), placeholders (%placeholder), @use/@forward module system, nesting
+CodeRAG includes a real-time terminal dashboard for monitoring the parsing pipeline.
 
-### 🔍 Deep Code Analysis
-- **41 node types** and **50 edge types** for comprehensive code modeling
-- **Cross-file reference resolution** with multi-strategy matching (exact → suffix → short name)
-- **Cross-language API matching** — PHP routes ↔ JavaScript fetch calls
-- **Cross-language style edges** — Component→stylesheet imports, CSS Module imports, className→class matching, JS↔CSS variable bridges, Tailwind class→theme token matching
-- **Graph algorithms** — PageRank, community detection, blast radius, circular dependency detection
-- **Git metadata enrichment** — Change frequency, co-change analysis, code ownership
-- **PHPStan type enrichment** — Static analysis integration for richer type information
+### Dashboard Wireframe
 
-### 🏗️ Framework Detection
-- **Laravel** — Routes, models, middleware, events, Blade templates
-- **Symfony** — Routes, services, Doctrine ORM, Twig templates
-- **React** — Components, hooks, context providers/consumers
-- **Express.js** — Routes, middleware chains, error handlers
-- **Next.js** — File-based routing, server/client components, API routes
-- **Vue** — Single-file components, Composition API, Pinia stores
-- **Angular** — Decorators, modules, dependency injection, routing
-- **Django** — Views, models, URL patterns, template tags
-- **Flask** — Routes, blueprints, extensions
-- **FastAPI** — Path operations, dependency injection, Pydantic models
-- **Tailwind CSS** — v3 config parsing + v4 CSS-first (@theme, @source, @utility, @custom-variant), theme tokens, @apply edges
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  🧠 CodeRAG Monitor   ▶ Parsing   Phase: Extraction   ⏱ 00:12   [1][2][3] │
+├──────────┬──────────┬──────────┬──────────┬──────────────────────────────────┤
+│  Files   │  Nodes   │  Edges   │  Errors  │  Throughput                     │
+│   142    │  3,847   │  8,291   │    2     │  ▁▃▅▇▆▄▃▅▇█▇▅▃▂               │
+├──────────┴──────────┴──────────┴──────────┴──────────────────────────────────┤
+│  Pipeline Progress                                                          │
+│  ✓ Discovery  ✓ Hashing  ▶ Extraction  ○ Resolution  ○ Frameworks  ...     │
+│  ████████████████████████░░░░░░░░░░░░░░░░░░░░░░░░░░  42%                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  Log Output                                                     [filtered] │
+│  20:15:03 INFO  Parsing src/php/UserController.php                         │
+│  20:15:03 INFO  Found 3 classes, 8 methods                                 │
+│  20:15:04 WARN  Unresolved import: App\Services\Cache                      │
+│  20:15:04 INFO  Parsing src/js/api.js                                      │
+│  20:15:04 INFO  Found 3 functions, 2 imports                               │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  CPU ████████░░ 42%    MEM ██████░░░░ 31%                                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  1:Dashboard  2:Logs  3:Details  4:Graph  ?:Help  q:Quit  gg/G:Top/Bot    │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
 
-### 🤖 MCP Server Integration
+### Installation
+
+```bash
+pip install coderag[tui]
+```
+
+### Usage
+
+```bash
+# Monitor a project's parsing pipeline in real-time
+coderag monitor /path/to/project
+
+# Monitor with verbose output
+coderag monitor /path/to/project --verbose
+```
+
+### Screens
+
+| Key | Screen | Description |
+|-----|--------|-------------|
+| `1` | **Dashboard** | Main overview with metrics, progress, logs, and resource usage |
+| `2` | **Logs** | Full-screen log viewer with regex search and level filtering |
+| `3` | **Details** | File metadata with nodes and edges in sortable tables |
+| `4` | **Graph** | SQLite graph statistics by language, node kind, and edge kind |
+| `?` | **Help** | Modal overlay with complete keybinding reference |
+
+### Keybinding Reference
+
+| Key | Action |
+|-----|--------|
+| `j` / `k` | Scroll down / up |
+| `G` | Jump to bottom |
+| `gg` | Jump to top (two-key vim sequence) |
+| `Ctrl+d` / `Ctrl+u` | Half-page down / up |
+| `Ctrl+f` / `Ctrl+b` | Full-page down / up |
+| `f` | Toggle auto-follow in logs |
+| `d` / `i` / `w` / `e` | Filter: Debug / Info / Warning / Error |
+| `a` | Show all log levels |
+| `/` | Search logs (regex) |
+| `n` / `N` | Next / previous search match |
+| `s` | Save logs to file |
+| `y` | Yank (copy) logs |
+| `r` | Refresh graph statistics |
+| `h` / `l` | Switch tabs in Details screen |
+| `:` | Enter command mode |
+| `q` | Quit |
+
+### Command Mode
+
+Press `:` to enter command mode (vim-style):
+
+| Command | Action |
+|---------|--------|
+| `:q` | Quit the application |
+| `:w` | Save current logs to file |
+| `:filter <level>` | Set log filter (DEBUG, INFO, WARNING, ERROR) |
+| `:set wrap` | Enable line wrapping |
+| `:set nowrap` | Disable line wrapping |
+| `Escape` | Cancel command mode |
+
+### Features
+
+- **Real-time metrics** — Files parsed, nodes/edges created, error count, throughput sparkline
+- **9-phase pipeline progress** — Visual indicators (✓ complete, ▶ active, ○ pending) with progress bar
+- **Filterable logs** — Level-based filtering, regex search, auto-follow, save/copy
+- **Resource monitoring** — Live CPU and memory usage bars via psutil
+- **Post-parse summary** — Modal overlay showing total parse time, files, nodes, edges, languages detected
+- **Vim keybindings** — Full vim-style navigation including `gg`, `G`, `j/k`, `Ctrl+d/u`
+- **Command mode** — Vim `:` command input for quit, save, filter, and settings
+- **Responsive layout** — Adapts to terminal sizes from 80×24 to 200×60+
+- **Dark theme** — Custom emerald/cyan accent color scheme optimized for terminals
+
+---
+
+## 🤖 MCP Server Integration
 - **8 tools** for AI agents to query the knowledge graph
 - **3 resources** providing passive context (summary, architecture, file map)
 - **Hot-reload** — Automatically detects database changes
