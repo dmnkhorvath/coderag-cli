@@ -195,6 +195,9 @@ class PipelineOrchestrator:
         # ── Phase 7: Git Enrichment ────────────────────────────
         git_enrichment_stats = self._run_git_enrichment(project_root)
 
+        # ── Phase 7b: PHPStan Enrichment (optional) ───────────
+        phpstan_stats = self._run_phpstan_enrichment(project_root)
+
         elapsed = time.perf_counter() - t0
         summary = PipelineSummary(
             total_files=total_files,
@@ -324,6 +327,66 @@ class PipelineOrchestrator:
 
         return stats
 
+    # ── Phase 7b: PHPStan Enrichment ──────────────────────
+
+    def _run_phpstan_enrichment(self, project_root: str) -> dict:
+        """Run optional PHPStan type enrichment on PHP files.
+
+        Checks if PHPStan is available and runs type analysis to
+        enrich PHP nodes with type information. Gracefully skips
+        if PHPStan is not installed.
+
+        Returns:
+            Dict with enrichment statistics.
+        """
+        stats: dict = {
+            "files_analyzed": 0,
+            "errors_found": 0,
+            "nodes_enriched": 0,
+            "skipped_reason": None,
+        }
+
+        try:
+            from coderag.enrichment.phpstan import PHPStanEnricher
+        except ImportError:
+            logger.debug("PHPStan enrichment module not available.")
+            stats["skipped_reason"] = "module_not_available"
+            return stats
+
+        try:
+            enricher = PHPStanEnricher(project_root=project_root)
+
+            if not enricher.is_available():
+                logger.info("Phase 7b: PHPStan not available, skipping.")
+                stats["skipped_reason"] = "phpstan_not_installed"
+                return stats
+
+            logger.info("Phase 7b: PHPStan enrichment (level %d)...", enricher.level)
+            report = enricher.enrich_nodes(self._store)
+
+            stats["files_analyzed"] = report.files_analyzed
+            stats["errors_found"] = report.errors_found
+            stats["nodes_enriched"] = report.nodes_enriched
+            stats["duration_ms"] = report.duration_ms
+            stats["phpstan_version"] = report.phpstan_version
+
+            if report.skipped_reason:
+                stats["skipped_reason"] = report.skipped_reason
+                logger.info("Phase 7b: Skipped — %s", report.skipped_reason)
+            else:
+                logger.info(
+                    "Phase 7b complete: %d files, %d errors, %d nodes enriched in %.1fms",
+                    report.files_analyzed,
+                    report.errors_found,
+                    report.nodes_enriched,
+                    report.duration_ms,
+                )
+
+        except Exception as exc:
+            logger.error("Phase 7b PHPStan enrichment failed: %s", exc)
+            stats["skipped_reason"] = f"error: {exc}"
+
+        return stats
 
     # ── Phase 5: Framework Detection ──────────────────────────
 
