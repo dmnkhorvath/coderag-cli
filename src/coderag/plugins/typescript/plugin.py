@@ -58,9 +58,14 @@ class TypeScriptPlugin(LanguagePlugin):
         return self._resolver
 
     def get_framework_detectors(self) -> list[FrameworkDetector]:
+
         # React detector works for TSX files too
+
         from coderag.plugins.javascript.frameworks.react import ReactDetector
-        return [ReactDetector()]
+
+        from coderag.plugins.typescript.frameworks.angular import AngularDetector
+
+        return [ReactDetector(), AngularDetector()]
 
     def cleanup(self) -> None:
         self._extractor = None
