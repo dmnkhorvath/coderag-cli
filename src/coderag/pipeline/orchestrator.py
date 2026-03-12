@@ -7,12 +7,14 @@ Implements phases 1-6 + 8:
   Phase 4: Resolve (resolve cross-file references into edges)
   Phase 5: Framework detection (run framework detectors)
   Phase 6: Cross-language matching (match API endpoints to calls)
+  Phase 7: Enrichment (git metadata, metrics)
   Phase 8: Persist (store in SQLite)
 """
 from __future__ import annotations
 
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
 from coderag.core.config import CodeGraphConfig
@@ -76,8 +78,8 @@ class PipelineOrchestrator:
         skipped = total_files - len(changed_files)
         logger.info("Found %d files, %d changed, %d skipped", total_files, len(changed_files), skipped)
 
-        # ── Phase 3: Extract ──────────────────────────────────
-        logger.info("Phase 3: Extracting ASTs...")
+        # ── Phase 3: Extract (parallel) ───────────────────────
+        logger.info("Phase 3: Extracting ASTs (parallel)...")
         total_nodes = 0
         total_edges = 0
         files_parsed = 0
@@ -85,18 +87,36 @@ class PipelineOrchestrator:
         all_results: list[ExtractionResult] = []
         parse_time_ms = 0.0
 
-        for fi in changed_files:
+        def _extract_single(fi: FileInfo) -> tuple[FileInfo, ExtractionResult | None, str | None, str | None]:
+            """Extract a single file. Returns (fi, result, plugin_name, error)."""
             plugin = self._registry.get_plugin_for_file(fi.path)
             if plugin is None:
-                logger.debug("No plugin for %s", fi.path)
-                continue
-
+                return fi, None, None, None
             try:
                 source = self._read_file(fi.path)
                 extractor = plugin.get_extractor()
                 result = extractor.extract(fi.path, source)
-                all_results.append(result)
+                return fi, result, plugin.name, None
+            except Exception as exc:
+                return fi, None, None, str(exc)
 
+        # Use ThreadPoolExecutor for I/O-bound file reading + CPU-light parsing
+        max_workers = min(8, max(1, len(changed_files)))
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(_extract_single, fi): fi
+                for fi in changed_files
+            }
+            for future in as_completed(futures):
+                fi, result, plugin_name, error = future.result()
+                if error:
+                    logger.error("Failed to process %s: %s", fi.path, error)
+                    files_errored += 1
+                    continue
+                if result is None:
+                    continue
+
+                all_results.append(result)
                 n_nodes = len(result.nodes)
                 n_edges = len(result.edges)
                 total_nodes += n_nodes
@@ -112,11 +132,12 @@ class PipelineOrchestrator:
                         )
 
                 # ── Phase 8a: Persist nodes & containment edges ──
-                self._persist_result(result, fi, plugin.name)
+                self._persist_result(result, fi, plugin_name)
 
-            except Exception as exc:
-                logger.error("Failed to process %s: %s", fi.path, exc)
-                files_errored += 1
+        logger.info(
+            "Phase 3 complete: %d files parsed, %d errors, %d nodes, %d edges in %.1fms",
+            files_parsed, files_errored, total_nodes, total_edges, parse_time_ms,
+        )
 
         # ── Phase 4: Reference Resolution ─────────────────────
         resolved_edge_count = 0
@@ -159,6 +180,7 @@ class PipelineOrchestrator:
         else:
             logger.info("Phase 4: No unresolved references to process.")
 
+
         # ── Phase 5: Framework Detection ──────────────────────
         fw_nodes, fw_edges = self._run_framework_detection(project_root)
         if fw_nodes or fw_edges:
@@ -169,6 +191,9 @@ class PipelineOrchestrator:
         xl_edges = self._run_cross_language_matching(project_root)
         if xl_edges:
             total_edges += xl_edges
+
+        # ── Phase 7: Git Enrichment ────────────────────────────
+        git_enrichment_stats = self._run_git_enrichment(project_root)
 
         elapsed = time.perf_counter() - t0
         summary = PipelineSummary(
@@ -187,6 +212,118 @@ class PipelineOrchestrator:
             resolved_edge_count, unresolved_edge_count, elapsed,
         )
         return summary
+
+    # ── Phase 7: Git Enrichment ───────────────────────────
+
+    def _run_git_enrichment(self, project_root: str) -> dict:
+        """Run git metadata enrichment on the project.
+
+        Analyzes git history to add change frequency, co-change,
+        ownership, and churn metrics to the knowledge graph.
+
+        Returns:
+            Dict with enrichment statistics.
+        """
+        logger.info("Phase 7: Git enrichment...")
+        t0 = time.perf_counter()
+        stats = {
+            "files_enriched": 0,
+            "co_change_pairs": 0,
+            "hot_files": 0,
+            "total_authors": 0,
+        }
+
+        try:
+            from coderag.enrichment.git_enricher import GitEnricher
+        except ImportError:
+            logger.warning("Phase 7: GitEnricher not available.")
+            return stats
+
+        # Check if project is a git repo
+        import os
+        if not os.path.isdir(os.path.join(project_root, ".git")):
+            logger.info("Phase 7: Not a git repository, skipping.")
+            return stats
+
+        try:
+            # Get known file paths from the store for filtering
+            known_files = set()
+            # Get all unique file paths from stored nodes (any kind)
+            all_nodes = self._store.find_nodes(limit=200000)
+            for node in all_nodes:
+                if node.file_path:
+                    rel = os.path.relpath(node.file_path, project_root)
+                    known_files.add(rel)
+
+            enricher = GitEnricher(
+                repo_root=project_root,
+                file_filter=known_files if known_files else None,
+            )
+            result = enricher.enrich_to_dicts()
+
+            # Store per-file git metrics in node metadata
+            file_metrics = result.get("file_metrics", {})
+            enriched_count = 0
+
+            for rel_path, metrics in file_metrics.items():
+                # Find ALL nodes for this file path and enrich them
+                abs_path = os.path.join(project_root, rel_path)
+                file_nodes = self._store.find_nodes(
+                    file_path=abs_path, limit=1000,
+                )
+                if not file_nodes:
+                    file_nodes = self._store.find_nodes(
+                        file_path=rel_path, limit=1000,
+                    )
+
+                if file_nodes:
+                    for node in file_nodes:
+                        node.metadata["git"] = metrics
+                    self._store.upsert_nodes(file_nodes)
+                    enriched_count += 1
+
+            # Store co-change data as metadata
+            co_changes = result.get("co_changes", [])
+            if co_changes:
+                import json
+                self._store.set_metadata(
+                    "git_co_changes",
+                    json.dumps(co_changes[:100]),  # Top 100 pairs
+                )
+
+            # Store global git stats
+            git_stats = result.get("stats", {})
+            self._store.set_metadata(
+                "git_total_commits",
+                str(git_stats.get("total_commits_analyzed", 0)),
+            )
+            self._store.set_metadata(
+                "git_total_authors",
+                str(git_stats.get("total_authors", 0)),
+            )
+            self._store.set_metadata(
+                "git_hot_files",
+                str(git_stats.get("hot_files", 0)),
+            )
+
+            stats["files_enriched"] = enriched_count
+            stats["co_change_pairs"] = len(co_changes)
+            stats["hot_files"] = git_stats.get("hot_files", 0)
+            stats["total_authors"] = git_stats.get("total_authors", 0)
+
+            elapsed = time.perf_counter() - t0
+            logger.info(
+                "Phase 7 complete: %d files enriched, %d co-change pairs, "
+                "%d hot files, %d authors in %.1fs",
+                enriched_count, len(co_changes),
+                stats["hot_files"], stats["total_authors"], elapsed,
+            )
+
+        except Exception as exc:
+            logger.error("Phase 7 git enrichment failed: %s", exc)
+
+        return stats
+
 
     # ── Phase 5: Framework Detection ──────────────────────────
 
