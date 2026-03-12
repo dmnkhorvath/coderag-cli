@@ -58,8 +58,10 @@ class PythonPlugin(LanguagePlugin):
         return self._resolver
 
     def get_framework_detectors(self) -> list[FrameworkDetector]:
-        # Framework detectors will be added in a future phase
-        return []
+        from coderag.plugins.python.frameworks.django import DjangoDetector
+        from coderag.plugins.python.frameworks.fastapi import FastAPIDetector
+        from coderag.plugins.python.frameworks.flask import FlaskDetector
+        return [DjangoDetector(), FlaskDetector(), FastAPIDetector()]
 
     def cleanup(self) -> None:
         self._extractor = None
