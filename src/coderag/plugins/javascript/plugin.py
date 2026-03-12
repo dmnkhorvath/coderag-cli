@@ -59,8 +59,10 @@ class JavaScriptPlugin(LanguagePlugin):
 
     def get_framework_detectors(self) -> list[FrameworkDetector]:
         from coderag.plugins.javascript.frameworks.express import ExpressDetector
+        from coderag.plugins.javascript.frameworks.nextjs import NextJSDetector
         from coderag.plugins.javascript.frameworks.react import ReactDetector
-        return [ExpressDetector(), ReactDetector()]
+        from coderag.plugins.javascript.frameworks.vue import VueDetector
+        return [ExpressDetector(), NextJSDetector(), ReactDetector(), VueDetector()]
 
     def cleanup(self) -> None:
         self._extractor = None
