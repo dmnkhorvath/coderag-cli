@@ -6,32 +6,44 @@ Covers:
 - search/vector_store.py (VectorStore)
 - search/hybrid.py (HybridSearcher, SearchResult)
 """
+
 from __future__ import annotations
 
 import json
-import os
 import sys
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
 
-from coderag.core.models import Node, NodeKind, Edge, EdgeKind
-
+from coderag.core.models import Node, NodeKind
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
-def _make_node(id_: str, name: str = "sym", kind: NodeKind = NodeKind.FUNCTION,
-               qname: str | None = None, file_path: str = "a.py",
-               language: str = "python", start_line: int = 1,
-               end_line: int = 10, **kw) -> Node:
+
+def _make_node(
+    id_: str,
+    name: str = "sym",
+    kind: NodeKind = NodeKind.FUNCTION,
+    qname: str | None = None,
+    file_path: str = "a.py",
+    language: str = "python",
+    start_line: int = 1,
+    end_line: int = 10,
+    **kw,
+) -> Node:
     return Node(
-        id=id_, kind=kind, name=name,
+        id=id_,
+        kind=kind,
+        name=name,
         qualified_name=qname or name,
-        file_path=file_path, start_line=start_line, end_line=end_line,
-        language=language, **kw,
+        file_path=file_path,
+        start_line=start_line,
+        end_line=end_line,
+        language=language,
+        **kw,
     )
 
 
@@ -39,21 +51,25 @@ def _make_node(id_: str, name: str = "sym", kind: NodeKind = NodeKind.FUNCTION,
 # search/__init__.py
 # ===================================================================
 
+
 class TestSearchInit:
     """Test the search package __init__ lazy-import machinery."""
 
     def test_semantic_available_flag_exists(self):
         from coderag.search import SEMANTIC_AVAILABLE
+
         assert isinstance(SEMANTIC_AVAILABLE, bool)
 
     def test_is_semantic_available_callable(self):
         from coderag.search import is_semantic_available
+
         result = is_semantic_available()
         assert isinstance(result, bool)
 
     def test_require_semantic_when_available(self):
         """If deps are installed, require_semantic should not raise."""
         from coderag.search import is_semantic_available, require_semantic
+
         if is_semantic_available():
             require_semantic()  # should not raise
         else:
@@ -62,30 +78,41 @@ class TestSearchInit:
 
     def test_lazy_import_code_embedder(self):
         from coderag.search import CodeEmbedder
+
         assert CodeEmbedder is not None
 
     def test_lazy_import_vector_store(self):
         from coderag.search import VectorStore
+
         assert VectorStore is not None
 
     def test_lazy_import_hybrid_searcher(self):
         from coderag.search import HybridSearcher
+
         assert HybridSearcher is not None
 
     def test_lazy_import_search_result(self):
         from coderag.search import SearchResult
+
         assert SearchResult is not None
 
     def test_lazy_import_invalid_attr(self):
         import coderag.search as search_mod
+
         with pytest.raises(AttributeError, match="has no attribute"):
             _ = search_mod.NonExistentThing
 
     def test_all_exports(self):
         from coderag.search import __all__
+
         expected = {
-            "SEMANTIC_AVAILABLE", "is_semantic_available", "require_semantic",
-            "CodeEmbedder", "VectorStore", "HybridSearcher", "SearchResult",
+            "SEMANTIC_AVAILABLE",
+            "is_semantic_available",
+            "require_semantic",
+            "CodeEmbedder",
+            "VectorStore",
+            "HybridSearcher",
+            "SearchResult",
         }
         assert set(__all__) == expected
 
@@ -93,6 +120,7 @@ class TestSearchInit:
 # ===================================================================
 # search/embedder.py
 # ===================================================================
+
 
 class TestCodeEmbedder:
     """Test CodeEmbedder with mocked sentence-transformers."""
@@ -107,9 +135,12 @@ class TestCodeEmbedder:
         mock_st_module = MagicMock()
         mock_st_module.SentenceTransformer.return_value = mock_model
 
-        with patch.dict(sys.modules, {"sentence_transformers": mock_st_module}), \
-             patch("coderag.search.embedder.require_semantic"):
+        with (
+            patch.dict(sys.modules, {"sentence_transformers": mock_st_module}),
+            patch("coderag.search.embedder.require_semantic"),
+        ):
             from coderag.search.embedder import CodeEmbedder
+
             yield CodeEmbedder, mock_model
 
     def test_init_stores_model_name(self, mock_st):
@@ -166,9 +197,14 @@ class TestCodeEmbedder:
 
     def test_build_node_text_function(self, mock_st):
         CodeEmbedder, _ = mock_st
-        node = _make_node("n1", name="do_stuff", kind=NodeKind.FUNCTION,
-                          qname="mod.do_stuff", language="python",
-                          metadata={"signature": "def do_stuff(x: int) -> str"})
+        node = _make_node(
+            "n1",
+            name="do_stuff",
+            kind=NodeKind.FUNCTION,
+            qname="mod.do_stuff",
+            language="python",
+            metadata={"signature": "def do_stuff(x: int) -> str"},
+        )
         text = CodeEmbedder.build_node_text(node)
         assert "function" in text.lower()
         assert "do_stuff" in text
@@ -182,30 +218,26 @@ class TestCodeEmbedder:
 
     def test_build_node_text_with_docblock(self, mock_st):
         CodeEmbedder, _ = mock_st
-        node = _make_node("n1", name="func", kind=NodeKind.FUNCTION,
-                          docblock="Does something useful")
+        node = _make_node("n1", name="func", kind=NodeKind.FUNCTION, docblock="Does something useful")
         text = CodeEmbedder.build_node_text(node)
         assert "Does something useful" in text
 
     def test_build_node_text_with_extends(self, mock_st):
         CodeEmbedder, _ = mock_st
-        node = _make_node("n1", name="Child", kind=NodeKind.CLASS,
-                          metadata={"extends": "Parent"})
+        node = _make_node("n1", name="Child", kind=NodeKind.CLASS, metadata={"extends": "Parent"})
         text = CodeEmbedder.build_node_text(node)
         assert "Parent" in text
 
     def test_build_node_text_with_implements(self, mock_st):
         CodeEmbedder, _ = mock_st
-        node = _make_node("n1", name="Svc", kind=NodeKind.CLASS,
-                          metadata={"implements": ["Iface1", "Iface2"]})
+        node = _make_node("n1", name="Svc", kind=NodeKind.CLASS, metadata={"implements": ["Iface1", "Iface2"]})
         text = CodeEmbedder.build_node_text(node)
         assert "Iface1" in text
         assert "Iface2" in text
 
     def test_build_node_text_implements_string(self, mock_st):
         CodeEmbedder, _ = mock_st
-        node = _make_node("n1", name="Svc", kind=NodeKind.CLASS,
-                          metadata={"implements": "SingleIface"})
+        node = _make_node("n1", name="Svc", kind=NodeKind.CLASS, metadata={"implements": "SingleIface"})
         text = CodeEmbedder.build_node_text(node)
         assert "SingleIface" in text
 
@@ -213,6 +245,7 @@ class TestCodeEmbedder:
 # ===================================================================
 # search/vector_store.py
 # ===================================================================
+
 
 class TestVectorStore:
     """Test VectorStore with mocked FAISS."""
@@ -226,9 +259,9 @@ class TestVectorStore:
         mock_faiss = MagicMock()
         mock_faiss.IndexFlatIP.return_value = mock_index
 
-        with patch.dict(sys.modules, {"faiss": mock_faiss}), \
-             patch("coderag.search.vector_store.require_semantic"):
+        with patch.dict(sys.modules, {"faiss": mock_faiss}), patch("coderag.search.vector_store.require_semantic"):
             from coderag.search.vector_store import VectorStore
+
             store = VectorStore(384)
             yield store, mock_faiss, mock_index
 
@@ -372,8 +405,9 @@ class TestVectorStore:
         def _fake_write(idx, path):
             with open(path, "wb") as fh:
                 fh.write(b"FAKE")
+
         mock_faiss.write_index.side_effect = _fake_write
-        
+
         store.save(str(tmp_path))
         mock_faiss.write_index.assert_called_once()
 
@@ -390,11 +424,13 @@ class TestVectorStore:
         (tmp_path / "vectors_meta.json").touch()
         with patch("coderag.search.vector_store.require_semantic"):
             from coderag.search.vector_store import VectorStore
+
             assert VectorStore.exists(str(tmp_path)) is True
 
     def test_exists_false(self, vs, tmp_path):
         with patch("coderag.search.vector_store.require_semantic"):
             from coderag.search.vector_store import VectorStore
+
             assert VectorStore.exists(str(tmp_path)) is False
 
     def test_load(self, vs, tmp_path):
@@ -410,6 +446,7 @@ class TestVectorStore:
 
         with patch("coderag.search.vector_store.require_semantic"):
             from coderag.search.vector_store import VectorStore
+
             loaded = VectorStore.load(str(tmp_path))
             assert loaded._dimension == 384
             assert loaded._node_ids == ["n1"]
@@ -418,6 +455,7 @@ class TestVectorStore:
     def test_load_missing_files(self, vs, tmp_path):
         with patch("coderag.search.vector_store.require_semantic"):
             from coderag.search.vector_store import VectorStore
+
             with pytest.raises(FileNotFoundError):
                 VectorStore.load(str(tmp_path))
 
@@ -426,16 +464,25 @@ class TestVectorStore:
 # search/hybrid.py
 # ===================================================================
 
+
 class TestSearchResult:
     """Test SearchResult dataclass."""
 
     def test_create_search_result(self):
         from coderag.search.hybrid import SearchResult
+
         sr = SearchResult(
-            node_id="n1", name="func", kind="function",
-            qualified_name="mod.func", file_path="a.py",
-            language="python", score=0.85, match_type="both",
-            fts_rank=1, vector_rank=2, vector_similarity=0.9,
+            node_id="n1",
+            name="func",
+            kind="function",
+            qualified_name="mod.func",
+            file_path="a.py",
+            language="python",
+            score=0.85,
+            match_type="both",
+            fts_rank=1,
+            vector_rank=2,
+            vector_similarity=0.9,
         )
         assert sr.node_id == "n1"
         assert sr.score == 0.85
@@ -452,6 +499,7 @@ class TestHybridSearcher:
         mock_embedder = MagicMock()
 
         from coderag.search.hybrid import HybridSearcher
+
         hs = HybridSearcher(mock_store, mock_vector_store, mock_embedder)
         return hs, mock_store, mock_vector_store, mock_embedder
 
@@ -537,9 +585,9 @@ class TestHybridSearcher:
 
     def test_search_result_fields(self, searcher):
         hs, mock_store, mock_vs, mock_emb = searcher
-        node1 = _make_node("n1", name="func1", kind=NodeKind.FUNCTION,
-                           qname="mod.func1", file_path="src/a.py",
-                           language="python")
+        node1 = _make_node(
+            "n1", name="func1", kind=NodeKind.FUNCTION, qname="mod.func1", file_path="src/a.py", language="python"
+        )
         mock_store.search_nodes.return_value = [node1]
         mock_vs.size = 10
         mock_emb.embed_text.return_value = np.random.randn(384).astype(np.float32)
@@ -562,14 +610,16 @@ class TestHybridSearcher:
 
 # ── Additional Embedder Tests ─────────────────────────────────────────
 
+
 class TestCodeEmbedderBuildTextEdgeCases:
     """Test _build_text with various metadata combinations."""
 
     def test_build_text_with_extends(self):
-        from unittest.mock import MagicMock, patch
+        from unittest.mock import patch
+
         with patch("coderag.search.embedder.require_semantic"):
-            from coderag.search.embedder import CodeEmbedder
             from coderag.core.models import Node, NodeKind
+            from coderag.search.embedder import CodeEmbedder
 
             embedder = CodeEmbedder.__new__(CodeEmbedder)
             node = Node(
@@ -589,10 +639,11 @@ class TestCodeEmbedderBuildTextEdgeCases:
             assert "Extends: Animal" in text
 
     def test_build_text_with_implements_list(self):
-        from unittest.mock import MagicMock, patch
+        from unittest.mock import patch
+
         with patch("coderag.search.embedder.require_semantic"):
-            from coderag.search.embedder import CodeEmbedder
             from coderag.core.models import Node, NodeKind
+            from coderag.search.embedder import CodeEmbedder
 
             embedder = CodeEmbedder.__new__(CodeEmbedder)
             node = Node(
@@ -611,10 +662,11 @@ class TestCodeEmbedderBuildTextEdgeCases:
             assert "Implements: Serializable, Comparable" in text
 
     def test_build_text_with_implements_string(self):
-        from unittest.mock import MagicMock, patch
+        from unittest.mock import patch
+
         with patch("coderag.search.embedder.require_semantic"):
-            from coderag.search.embedder import CodeEmbedder
             from coderag.core.models import Node, NodeKind
+            from coderag.search.embedder import CodeEmbedder
 
             embedder = CodeEmbedder.__new__(CodeEmbedder)
             node = Node(
@@ -633,10 +685,11 @@ class TestCodeEmbedderBuildTextEdgeCases:
             assert "Implements: Runnable" in text
 
     def test_build_text_with_superclass(self):
-        from unittest.mock import MagicMock, patch
+        from unittest.mock import patch
+
         with patch("coderag.search.embedder.require_semantic"):
-            from coderag.search.embedder import CodeEmbedder
             from coderag.core.models import Node, NodeKind
+            from coderag.search.embedder import CodeEmbedder
 
             embedder = CodeEmbedder.__new__(CodeEmbedder)
             node = Node(
@@ -659,8 +712,10 @@ class TestCodeEmbedderEmbedMethods:
     """Test embed_text and embed_batch methods."""
 
     def test_embed_text(self):
+        from unittest.mock import MagicMock, patch
+
         import numpy as np
-        from unittest.mock import MagicMock, patch, PropertyMock
+
         with patch("coderag.search.embedder.require_semantic"):
             from coderag.search.embedder import CodeEmbedder
 
@@ -676,8 +731,8 @@ class TestCodeEmbedderEmbedMethods:
             embedder._model.encode.assert_called_once()
 
     def test_embed_batch_empty(self):
-        import numpy as np
         from unittest.mock import MagicMock, patch
+
         with patch("coderag.search.embedder.require_semantic"):
             from coderag.search.embedder import CodeEmbedder
 
@@ -692,8 +747,10 @@ class TestCodeEmbedderEmbedMethods:
             mock_model.encode.assert_not_called()
 
     def test_embed_batch_with_texts(self):
-        import numpy as np
         from unittest.mock import MagicMock, patch
+
+        import numpy as np
+
         with patch("coderag.search.embedder.require_semantic"):
             from coderag.search.embedder import CodeEmbedder
 
@@ -712,8 +769,9 @@ class TestVectorStoreRemoveAndSearch:
     """Test VectorStore remove_vectors and search edge cases."""
 
     def test_remove_vectors_rebuild(self):
-        import numpy as np
         from unittest.mock import MagicMock, patch
+
+        import numpy as np
 
         mock_faiss = MagicMock()
         mock_index = MagicMock()
@@ -742,7 +800,6 @@ class TestVectorStoreRemoveAndSearch:
                 assert "b" not in store._content_hashes
 
     def test_remove_vectors_all(self):
-        import numpy as np
         from unittest.mock import MagicMock, patch
 
         mock_faiss = MagicMock()
@@ -766,8 +823,9 @@ class TestVectorStoreRemoveAndSearch:
                 assert store._id_to_pos == {}
 
     def test_search_with_results(self):
-        import numpy as np
         from unittest.mock import MagicMock, patch
+
+        import numpy as np
 
         mock_faiss = MagicMock()
 
@@ -791,12 +849,19 @@ class TestVectorStoreRemoveAndSearch:
 
                 results = store.search(np.random.randn(384).astype(np.float32), k=2)
                 assert len(results) == 2
-                import pytest as _pt; assert results[0][0] == "a"; assert results[0][1] == _pt.approx(0.9, abs=1e-6)
-                import pytest as _pt2; assert results[1][0] == "c"; assert results[1][1] == _pt2.approx(0.7, abs=1e-6)
+                import pytest as _pt
+
+                assert results[0][0] == "a"
+                assert results[0][1] == _pt.approx(0.9, abs=1e-6)
+                import pytest as _pt2
+
+                assert results[1][0] == "c"
+                assert results[1][1] == _pt2.approx(0.7, abs=1e-6)
 
     def test_search_filters_negative_indices(self):
-        import numpy as np
         from unittest.mock import MagicMock, patch
+
+        import numpy as np
 
         mock_faiss = MagicMock()
 
@@ -820,4 +885,7 @@ class TestVectorStoreRemoveAndSearch:
 
                 results = store.search(np.random.randn(384).astype(np.float32), k=2)
                 assert len(results) == 1
-                import pytest as _pt; assert results[0][0] == "a"; assert results[0][1] == _pt.approx(0.9, abs=1e-6)
+                import pytest as _pt
+
+                assert results[0][0] == "a"
+                assert results[0][1] == _pt.approx(0.9, abs=1e-6)

@@ -369,6 +369,7 @@ class ResolutionResult:
     is_external: bool = False
     package_name: str | None = None
     exported_symbols: list[str] = field(default_factory=list)
+    metadata: dict = field(default_factory=dict)
 
 
 @dataclass(slots=True)

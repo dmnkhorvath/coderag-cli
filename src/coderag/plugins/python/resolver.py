@@ -308,7 +308,7 @@ class PythonResolver(ModuleResolver):
         if top_level and not is_relative and top_level in _get_stdlib_modules():
             return ResolutionResult(
                 resolved_path=None,
-                strategy=ResolutionStrategy.HEURISTIC,
+                resolution_strategy=ResolutionStrategy.HEURISTIC,
                 confidence=0.3,
                 metadata={"stdlib": True, "module": import_path},
             )
@@ -329,7 +329,7 @@ class PythonResolver(ModuleResolver):
         # Unresolved
         return ResolutionResult(
             resolved_path=None,
-            strategy=ResolutionStrategy.UNRESOLVED,
+            resolution_strategy=ResolutionStrategy.UNRESOLVED,
             confidence=0.0,
             metadata={"import_path": import_path},
         )
@@ -351,13 +351,13 @@ class PythonResolver(ModuleResolver):
         if symbol_name in self._file_index:
             return ResolutionResult(
                 resolved_path=self._file_index[symbol_name],
-                strategy=ResolutionStrategy.INDEX,
+                resolution_strategy=ResolutionStrategy.INDEX,
                 confidence=0.8,
             )
 
         return ResolutionResult(
             resolved_path=None,
-            strategy=ResolutionStrategy.UNRESOLVED,
+            resolution_strategy=ResolutionStrategy.UNRESOLVED,
             confidence=0.0,
             metadata={"symbol": symbol_name},
         )
@@ -459,7 +459,7 @@ class PythonResolver(ModuleResolver):
             if init.exists():
                 return ResolutionResult(
                     resolved_path=str(init.relative_to(root)),
-                    strategy=ResolutionStrategy.INDEX,
+                    resolution_strategy=ResolutionStrategy.INDEX,
                     confidence=0.9,
                 )
             return None
@@ -474,7 +474,7 @@ class PythonResolver(ModuleResolver):
         if py_file.exists() and not self._is_venv(py_file, root):
             return ResolutionResult(
                 resolved_path=str(py_file.relative_to(root)),
-                strategy=ResolutionStrategy.EXTENSION,
+                resolution_strategy=ResolutionStrategy.EXTENSION,
                 confidence=0.95,
             )
 
@@ -483,7 +483,7 @@ class PythonResolver(ModuleResolver):
         if pyi_file.exists() and not self._is_venv(pyi_file, root):
             return ResolutionResult(
                 resolved_path=str(pyi_file.relative_to(root)),
-                strategy=ResolutionStrategy.EXTENSION,
+                resolution_strategy=ResolutionStrategy.EXTENSION,
                 confidence=0.9,
             )
 
@@ -492,7 +492,7 @@ class PythonResolver(ModuleResolver):
         if init_file.exists() and not self._is_venv(init_file, root):
             return ResolutionResult(
                 resolved_path=str(init_file.relative_to(root)),
-                strategy=ResolutionStrategy.INDEX,
+                resolution_strategy=ResolutionStrategy.INDEX,
                 confidence=0.9,
             )
 
