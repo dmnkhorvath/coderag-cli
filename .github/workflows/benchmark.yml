@@ -1,0 +1,46 @@
+name: Benchmark
+
+on:
+  schedule:
+    - cron: "0 0 * * 0"  # Every Sunday at 00:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    name: Parse Benchmark
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install CodeRAG
+        run: pip install -e '.[dev]'
+
+      - name: Clone test repository (Slim framework)
+        run: git clone --depth 1 https://github.com/slimphp/Slim.git /tmp/bench-slim
+
+      - name: Run CodeRAG parse
+        run: |
+          coderag parse /tmp/bench-slim -o /tmp/bench-output
+          echo "--- Parse complete ---"
+
+      - name: Run CodeRAG info
+        run: |
+          coderag info /tmp/bench-output | tee benchmark-info.txt
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-${{ github.run_number }}
+          path: |
+            benchmark-info.txt
+          retention-days: 90

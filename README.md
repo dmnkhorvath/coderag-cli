@@ -8,6 +8,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Tests: 165 passing](https://img.shields.io/badge/tests-271%20passing-brightgreen.svg)](#-testing)
 [![Lines: 32K+](https://img.shields.io/badge/lines-32K%2B-informational.svg)](#-codebase-stats)
+[![CI](https://github.com/dmnkhorvath/coderag/actions/workflows/ci.yml/badge.svg)](https://github.com/dmnkhorvath/coderag/actions/workflows/ci.yml)
 
 *Parse PHP, JavaScript, TypeScript, Python, CSS, and SCSS codebases into rich knowledge graphs with framework detection, cross-language analysis, and MCP server integration for AI-powered code understanding.*
 
