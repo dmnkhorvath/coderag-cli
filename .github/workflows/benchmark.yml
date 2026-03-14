@@ -23,24 +23,22 @@ jobs:
           cache: pip
 
       - name: Install CodeRAG
-        run: pip install -e '.[dev]'
+        run: pip install -e '.[all]'
 
       - name: Clone test repository (Slim framework)
         run: git clone --depth 1 https://github.com/slimphp/Slim.git /tmp/bench-slim
 
       - name: Run CodeRAG parse
-        run: |
-          coderag parse /tmp/bench-slim -o /tmp/bench-output
-          echo "--- Parse complete ---"
+        run: coderag parse /tmp/bench-slim
 
       - name: Run CodeRAG info
         run: |
-          coderag info /tmp/bench-output | tee benchmark-info.txt
+          cd /tmp/bench-slim
+          coderag info | tee /tmp/benchmark-info.txt
 
       - name: Upload benchmark results
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-${{ github.run_number }}
-          path: |
-            benchmark-info.txt
+          path: /tmp/benchmark-info.txt
           retention-days: 90
