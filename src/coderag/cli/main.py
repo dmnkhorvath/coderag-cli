@@ -1323,10 +1323,6 @@ def enrich(ctx: click.Context, phpstan: bool, level: int, phpstan_path: str) -> 
         codegraph enrich --phpstan --phpstan-path vendor/bin/phpstan
     """
     from coderag.enrichment.phpstan import PHPStanEnricher
-    from coderag.storage.sqlite_store import SQLiteStore
-
-    project_dir = ctx.obj.get("project_dir", ".")
-    db_path = ctx.obj.get("db")
 
     console = Console()
 
@@ -1334,57 +1330,57 @@ def enrich(ctx: click.Context, phpstan: bool, level: int, phpstan_path: str) -> 
         console.print("[yellow]No enrichment flags specified. Use --phpstan to run PHPStan enrichment.[/yellow]")
         return
 
-    # Resolve database path
-    if db_path is None:
-        db_path = os.path.join(project_dir, ".codegraph", "graph.db")
+    # Use standard config/store pattern for consistent DB resolution
+    config = _load_config(ctx.obj["config_path"])
+    if ctx.obj["db_override"]:
+        config.db_path = ctx.obj["db_override"]
 
-    if not os.path.exists(db_path):
-        console.print(f"[red]Database not found at {db_path}. Run 'codegraph parse' first.[/red]")
-        raise SystemExit(1)
+    store = _open_store(config)
 
-    # PHPStan enrichment
-    if phpstan:
-        console.print(f"\n[bold blue]PHPStan Enrichment[/bold blue] (level {level})")
-        console.print(f"Project: {os.path.abspath(project_dir)}")
-        console.print(f"Database: {db_path}\n")
+    # Infer project root from config
+    project_dir = config.project_root or os.getcwd()
 
-        enricher = PHPStanEnricher(
-            project_root=os.path.abspath(project_dir),
-            phpstan_path=phpstan_path,
-            level=level,
+    console.print(f"\n[bold blue]PHPStan Enrichment[/bold blue] (level {level})")
+    console.print(f"Project: {os.path.abspath(project_dir)}")
+    console.print(f"Database: {config.db_path_absolute}\n")
+
+    enricher = PHPStanEnricher(
+        project_root=os.path.abspath(project_dir),
+        phpstan_path=phpstan_path,
+        level=level,
+    )
+
+    if not enricher.is_available():
+        console.print(
+            "[yellow]PHPStan is not available.[/yellow]\n"
+            "Install it with: [bold]composer require --dev phpstan/phpstan[/bold]\n"
+            "Or specify the path: [bold]--phpstan-path /path/to/phpstan[/bold]"
         )
+        store.close()
+        return
 
-        if not enricher.is_available():
-            console.print(
-                "[yellow]PHPStan is not available.[/yellow]\n"
-                "Install it with: [bold]composer require --dev phpstan/phpstan[/bold]\n"
-                "Or specify the path: [bold]--phpstan-path /path/to/phpstan[/bold]"
-            )
-            return
+    console.print(f"PHPStan version: {enricher.get_version()}")
 
-        console.print(f"PHPStan version: {enricher.get_version()}")
+    try:
+        with console.status("Running PHPStan analysis..."):
+            report = enricher.enrich_nodes(store)
 
-        store = SQLiteStore(db_path)
-        try:
-            with console.status("Running PHPStan analysis..."):
-                report = enricher.enrich_nodes(store)
-
-            # Display report
-            if report.skipped_reason:
-                console.print(f"[yellow]Skipped: {report.skipped_reason}[/yellow]")
-            else:
-                table = Table(title="PHPStan Enrichment Report")
-                table.add_column("Metric", style="cyan")
-                table.add_column("Value", style="green", justify="right")
-                table.add_row("Files Analyzed", str(report.files_analyzed))
-                table.add_row("Errors Found", str(report.errors_found))
-                table.add_row("Nodes Enriched", str(report.nodes_enriched))
-                table.add_row("Duration", f"{report.duration_ms:.0f}ms")
-                table.add_row("PHPStan Version", report.phpstan_version)
-                table.add_row("Analysis Level", str(report.level))
-                console.print(table)
-        finally:
-            store.close()
+        # Display report
+        if report.skipped_reason:
+            console.print(f"[yellow]Skipped: {report.skipped_reason}[/yellow]")
+        else:
+            table = Table(title="PHPStan Enrichment Report")
+            table.add_column("Metric", style="cyan")
+            table.add_column("Value", style="green", justify="right")
+            table.add_row("Files Analyzed", str(report.files_analyzed))
+            table.add_row("Errors Found", str(report.errors_found))
+            table.add_row("Nodes Enriched", str(report.nodes_enriched))
+            table.add_row("Duration", f"{report.duration_ms:.0f}ms")
+            table.add_row("PHPStan Version", report.phpstan_version)
+            table.add_row("Analysis Level", str(report.level))
+            console.print(table)
+    finally:
+        store.close()
 
 
 # ── embed ─────────────────────────────────────────────────────
