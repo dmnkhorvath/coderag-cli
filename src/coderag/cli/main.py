@@ -1467,7 +1467,7 @@ def enrich(ctx: click.Context, phpstan: bool, level: int, phpstan_path: str) -> 
 def embed(ctx: click.Context, path: str, model: str | None, batch_size: int | None) -> None:
     """Build or rebuild the semantic vector index for a project.
 
-    Embeds all nodes in the knowledge graph using sentence-transformers
+    Embeds all nodes in the knowledge graph using fastembed (ONNX)
     and stores the FAISS index alongside the SQLite database.
 
     Example:
@@ -1482,7 +1482,7 @@ def embed(ctx: click.Context, path: str, model: str | None, batch_size: int | No
         console.print(
             "[red]Semantic search requires extra dependencies.[/red]\n"
             "Install with: [bold]pip install coderag[semantic][/bold]\n"
-            "Or: [bold]pip install sentence-transformers faiss-cpu[/bold]"
+            "Or: [bold]pip install fastembed faiss-cpu[/bold]"
         )
         raise SystemExit(1)
 

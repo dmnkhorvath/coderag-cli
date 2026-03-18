@@ -399,4 +399,4 @@ explicit tool calls:
 
 ### Semantic search not working
 - Run `coderag embed .` first to generate vector embeddings
-- Requires `sentence-transformers` and `faiss-cpu` (included in `[full]` install)
+- Requires `fastembed` and `faiss-cpu` (included in `[full]` install)

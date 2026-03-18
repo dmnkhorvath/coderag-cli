@@ -123,20 +123,20 @@ class TestSearchInit:
 
 
 class TestCodeEmbedder:
-    """Test CodeEmbedder with mocked sentence-transformers."""
+    """Test CodeEmbedder with mocked fastembed."""
 
     @pytest.fixture()
     def mock_st(self):
-        """Patch sentence_transformers and require_semantic."""
+        """Patch fastembed and require_semantic."""
         mock_model = MagicMock()
-        mock_model.get_sentence_embedding_dimension.return_value = 384
-        mock_model.encode.return_value = np.random.randn(384).astype(np.float32)
+        # fastembed embed() returns a generator of np.ndarray
+        mock_model.embed.return_value = iter([np.random.randn(384).astype(np.float32)])
 
-        mock_st_module = MagicMock()
-        mock_st_module.SentenceTransformer.return_value = mock_model
+        mock_fe_module = MagicMock()
+        mock_fe_module.TextEmbedding.return_value = mock_model
 
         with (
-            patch.dict(sys.modules, {"sentence_transformers": mock_st_module}),
+            patch.dict(sys.modules, {"fastembed": mock_fe_module}),
             patch("coderag.search.embedder.require_semantic"),
         ):
             from coderag.search.embedder import CodeEmbedder
@@ -151,7 +151,7 @@ class TestCodeEmbedder:
     def test_default_model_name(self, mock_st):
         CodeEmbedder, _ = mock_st
         emb = CodeEmbedder()
-        assert emb.model_name == "all-MiniLM-L6-v2"
+        assert emb.model_name == "sentence-transformers/all-MiniLM-L6-v2"
 
     def test_lazy_loading_no_model_on_init(self, mock_st):
         CodeEmbedder, _ = mock_st
@@ -160,22 +160,31 @@ class TestCodeEmbedder:
 
     def test_dimension_triggers_model_load(self, mock_st):
         CodeEmbedder, mock_model = mock_st
+        # fastembed determines dimension via probe embedding
+        mock_model.embed.return_value = iter([np.random.randn(384).astype(np.float32)])
         emb = CodeEmbedder()
         dim = emb.dimension
         assert dim == 384
-        mock_model.get_sentence_embedding_dimension.assert_called()
 
     def test_embed_text_returns_ndarray(self, mock_st):
         CodeEmbedder, mock_model = mock_st
+        # First call is probe for dimension, second is actual embed
+        mock_model.embed.side_effect = [
+            iter([np.random.randn(384).astype(np.float32)]),
+            iter([np.random.randn(384).astype(np.float32)]),
+        ]
         emb = CodeEmbedder()
         result = emb.embed_text("hello world")
         assert isinstance(result, np.ndarray)
         assert result.dtype == np.float32
-        mock_model.encode.assert_called_once()
 
     def test_embed_batch_returns_2d(self, mock_st):
         CodeEmbedder, mock_model = mock_st
-        mock_model.encode.return_value = np.random.randn(3, 384).astype(np.float32)
+        # First call is probe for dimension, second is batch embed
+        mock_model.embed.side_effect = [
+            iter([np.random.randn(384).astype(np.float32)]),
+            iter([np.random.randn(384).astype(np.float32) for _ in range(3)]),
+        ]
         emb = CodeEmbedder()
         result = emb.embed_batch(["a", "b", "c"])
         assert result.shape == (3, 384)
@@ -183,16 +192,22 @@ class TestCodeEmbedder:
 
     def test_embed_batch_empty(self, mock_st):
         CodeEmbedder, mock_model = mock_st
+        # Probe embed for dimension
+        mock_model.embed.return_value = iter([np.random.randn(384).astype(np.float32)])
         emb = CodeEmbedder()
         result = emb.embed_batch([])
         assert result.shape[0] == 0
 
     def test_embed_batch_custom_batch_size(self, mock_st):
         CodeEmbedder, mock_model = mock_st
-        mock_model.encode.return_value = np.random.randn(2, 384).astype(np.float32)
+        # First call is probe for dimension, second is batch embed
+        mock_model.embed.side_effect = [
+            iter([np.random.randn(384).astype(np.float32)]),
+            iter([np.random.randn(384).astype(np.float32) for _ in range(2)]),
+        ]
         emb = CodeEmbedder()
         emb.embed_batch(["a", "b"], batch_size=64)
-        call_kwargs = mock_model.encode.call_args
+        call_kwargs = mock_model.embed.call_args
         assert call_kwargs[1]["batch_size"] == 64
 
     def test_build_node_text_function(self, mock_st):
@@ -723,12 +738,12 @@ class TestCodeEmbedderEmbedMethods:
             embedder._model_name = "test-model"
             embedder._dimension = 384
             embedder._model = MagicMock()
-            embedder._model.encode.return_value = np.random.randn(384).astype(np.float32)
+            # fastembed embed() returns a generator of np.ndarray
+            embedder._model.embed.return_value = iter([np.random.randn(384).astype(np.float32)])
 
             result = embedder.embed_text("hello world")
             assert result.shape == (384,)
             assert result.dtype == np.float32
-            embedder._model.encode.assert_called_once()
 
     def test_embed_batch_empty(self):
         from unittest.mock import MagicMock, patch
@@ -738,13 +753,12 @@ class TestCodeEmbedderEmbedMethods:
 
             embedder = CodeEmbedder.__new__(CodeEmbedder)
             embedder._model_name = "test-model"
-            mock_model = MagicMock()
-            mock_model.get_sentence_embedding_dimension.return_value = 384
-            embedder._model = mock_model
+            embedder._dimension = 384
+            embedder._model = MagicMock()
 
             result = embedder.embed_batch([])
             assert result.shape == (0, 384)
-            mock_model.encode.assert_not_called()
+            embedder._model.embed.assert_not_called()
 
     def test_embed_batch_with_texts(self):
         from unittest.mock import MagicMock, patch
@@ -758,7 +772,8 @@ class TestCodeEmbedderEmbedMethods:
             embedder._model_name = "test-model"
             embedder._dimension = 384
             embedder._model = MagicMock()
-            embedder._model.encode.return_value = np.random.randn(3, 384).astype(np.float32)
+            # fastembed embed() returns a generator of np.ndarray
+            embedder._model.embed.return_value = iter([np.random.randn(384).astype(np.float32) for _ in range(3)])
 
             result = embedder.embed_batch(["a", "b", "c"])
             assert result.shape == (3, 384)

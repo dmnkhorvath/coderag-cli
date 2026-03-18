@@ -24,7 +24,7 @@ _IMPORT_ERROR: str | None = None
 
 try:
     import faiss  # noqa: F401
-    import sentence_transformers  # noqa: F401
+    import fastembed  # noqa: F401
 
     _SEMANTIC_AVAILABLE = True
 except ImportError as exc:
@@ -38,7 +38,7 @@ SEMANTIC_AVAILABLE: bool = _SEMANTIC_AVAILABLE
 
 
 def is_semantic_available() -> bool:
-    """Return *True* when sentence-transformers **and** faiss-cpu are importable."""
+    """Return *True* when fastembed **and** faiss-cpu are importable."""
     return _SEMANTIC_AVAILABLE
 
 

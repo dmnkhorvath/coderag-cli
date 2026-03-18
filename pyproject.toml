@@ -62,7 +62,7 @@ dependencies = [
 
 [project.optional-dependencies]
 semantic = [
-    "sentence-transformers>=2.2.0",
+    "fastembed>=0.3.0",
     "faiss-cpu>=1.7.0",
 ]
 tui = [
@@ -79,14 +79,14 @@ dev = [
 ]
 
 full = [
-    "sentence-transformers>=2.2.0",
+    "fastembed>=0.3.0",
     "faiss-cpu>=1.7.0",
     "textual>=1.0.0",
     "psutil>=5.9.0",
 ]
 
 all = [
-    "sentence-transformers>=2.2.0",
+    "fastembed>=0.3.0",
     "faiss-cpu>=1.7.0",
     "textual>=1.0.0",
     "psutil>=5.9.0",

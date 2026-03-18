@@ -1,7 +1,8 @@
 """Code Embedder — convert code nodes to vector embeddings.
 
-Uses sentence-transformers to produce dense vector representations
-of code symbols for semantic search.
+Uses fastembed (ONNX Runtime) to produce dense vector representations
+of code symbols for semantic search.  No PyTorch or remote HuggingFace
+dependency required — models run locally via ONNX.
 """
 
 from __future__ import annotations
@@ -14,30 +15,43 @@ import numpy as np
 from coderag.search import require_semantic
 
 if TYPE_CHECKING:
-    from sentence_transformers import SentenceTransformer
+    from fastembed import TextEmbedding
 
     from coderag.core.models import Node
 
 logger = logging.getLogger(__name__)
 
-# Default model — small, fast, 384 dimensions
-DEFAULT_MODEL = "all-MiniLM-L6-v2"
+# Default model — small, fast, 384 dimensions, runs locally via ONNX
+DEFAULT_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+
+# Mapping for backward compatibility: short names -> fastembed names
+_MODEL_ALIASES: dict[str, str] = {
+    "all-MiniLM-L6-v2": "sentence-transformers/all-MiniLM-L6-v2",
+    "bge-small-en-v1.5": "BAAI/bge-small-en-v1.5",
+    "bge-small-en": "BAAI/bge-small-en",
+}
 
 
 class CodeEmbedder:
     """Produce vector embeddings for code graph nodes.
 
-    The underlying *sentence-transformers* model is loaded lazily on
+    The underlying *fastembed* ONNX model is loaded lazily on
     first use so that importing this module is essentially free.
 
+    Models run **locally** via ONNX Runtime — no PyTorch or remote
+    HuggingFace API calls required.
+
     Args:
-        model_name: HuggingFace model identifier.  Defaults to
-            ``all-MiniLM-L6-v2`` (384-d, ~80 MB).
+        model_name: Model identifier.  Accepts fastembed full names
+            (e.g. ``sentence-transformers/all-MiniLM-L6-v2``) or short
+            aliases (e.g. ``all-MiniLM-L6-v2``).  Defaults to
+            ``sentence-transformers/all-MiniLM-L6-v2`` (384-d, ~90 MB ONNX).
     """
 
     def __init__(self, model_name: str = DEFAULT_MODEL) -> None:
-        self._model_name = model_name
-        self._model: SentenceTransformer | None = None
+        self._model_name = _MODEL_ALIASES.get(model_name, model_name)
+        self._model: TextEmbedding | None = None
+        self._dimension: int | None = None
 
     # ── Properties ────────────────────────────────────────────
 
@@ -48,20 +62,25 @@ class CodeEmbedder:
     @property
     def dimension(self) -> int:
         """Embedding dimensionality (loads model if needed)."""
-        return self._get_model().get_sentence_embedding_dimension()  # type: ignore[return-value]
+        if self._dimension is None:
+            self._get_model()
+        return self._dimension  # type: ignore[return-value]
 
     # ── Lazy model loading ────────────────────────────────────
 
-    def _get_model(self) -> SentenceTransformer:
+    def _get_model(self) -> TextEmbedding:
         if self._model is None:
             require_semantic()
-            from sentence_transformers import SentenceTransformer
+            from fastembed import TextEmbedding
 
-            logger.info("Loading embedding model: %s", self._model_name)
-            self._model = SentenceTransformer(self._model_name)
+            logger.info("Loading embedding model (ONNX): %s", self._model_name)
+            self._model = TextEmbedding(model_name=self._model_name)
+            # Determine dimension from a probe embedding
+            probe = list(self._model.embed(["dimension probe"]))[0]
+            self._dimension = probe.shape[0]
             logger.info(
-                "Model loaded — dimension=%d",
-                self._model.get_sentence_embedding_dimension(),
+                "Model loaded — dimension=%d (ONNX Runtime, local)",
+                self._dimension,
             )
         return self._model
 
@@ -156,8 +175,8 @@ class CodeEmbedder:
             1-D float32 array of shape ``(dimension,)``.
         """
         model = self._get_model()
-        vec = model.encode(text, normalize_embeddings=True, show_progress_bar=False)
-        return np.asarray(vec, dtype=np.float32)
+        vecs = list(model.embed([text]))
+        return np.asarray(vecs[0], dtype=np.float32)
 
     def embed_batch(self, texts: list[str], batch_size: int = 128) -> np.ndarray:
         """Embed a batch of texts efficiently.
@@ -173,10 +192,5 @@ class CodeEmbedder:
             return np.empty((0, self.dimension), dtype=np.float32)
 
         model = self._get_model()
-        vecs = model.encode(
-            texts,
-            normalize_embeddings=True,
-            show_progress_bar=False,
-            batch_size=batch_size,
-        )
+        vecs = list(model.embed(texts, batch_size=batch_size))
         return np.asarray(vecs, dtype=np.float32)

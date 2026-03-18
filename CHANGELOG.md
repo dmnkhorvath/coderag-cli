@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Replaced sentence-transformers with fastembed** for local ONNX-based embeddings
+  - No PyTorch dependency (~2GB savings)
+  - Models run locally via ONNX Runtime (~90MB)
+  - Same all-MiniLM-L6-v2 model, same 384 dimensions
+  - Backward-compatible with existing vector indices
+  - Short model name aliases supported for convenience
+
+## [Unreleased]
+
 ### Added
 - `install-coderag.sh` now auto-generates `CLAUDE.md` for Claude Code integration (Step 8)
 - `install-coderag.sh` now auto-generates `.mcp.json` with `--watch` flag for MCP server config (Step 9)
@@ -34,7 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - PHPStan type enrichment with CLI command and 47 tests
 - Python language plugin with tree-sitter extractor, resolver, and module resolution
 - Django, Flask, FastAPI framework detectors for Python plugin
-- Semantic search with vector embeddings (FAISS + sentence-transformers)
+- Semantic search with vector embeddings (FAISS + fastembed ONNX)
 - Large-scale optimization: parallel extraction, SQLite batching, memory management
 - TUI monitoring dashboard with 5 screens, vim keybindings, and command mode
 - GitHub Actions CI/CD (ci, release, benchmark workflows)
