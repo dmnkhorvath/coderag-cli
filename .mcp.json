@@ -4,7 +4,8 @@
       "command": "coderag",
       "args": [
         "serve",
-        "."
+        ".",
+        "--watch"
       ],
       "env": {}
     }

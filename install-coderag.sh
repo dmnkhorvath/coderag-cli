@@ -15,7 +15,9 @@
 #   5. Shows graph statistics      (coderag info)
 #   6. Generates embeddings        (coderag embed)       [optional]
 #   7. Installs SKILL.md           (OpenSkill format)
-#   8. Verifies MCP server         (coderag serve --watch)
+#   8. Installs CLAUDE.md          (Claude Code instructions)
+#   9. Installs .mcp.json          (MCP server config)
+#  10. Verifies MCP server         (coderag serve --watch)
 
 set -euo pipefail
 
@@ -54,7 +56,7 @@ info "Project: ${BOLD}$PROJECT_NAME${NC}"
 info "Path:    $PROJECT_DIR"
 
 # ── Step 1: Verify coderag is installed ───────────────────────
-step "Step 1/8: Checking coderag installation"
+step "Step 1/10: Checking coderag installation"
 if ! command -v coderag >/dev/null 2>&1; then
     err "coderag not found on PATH"
     echo ""
@@ -67,7 +69,7 @@ fi
 ok "coderag found: $(which coderag)"
 
 # ── Step 2: Initialize config (coderag init) ──────────────────
-step "Step 2/8: Initializing configuration"
+step "Step 2/10: Initializing configuration"
 CONFIG_FILE="$PROJECT_DIR/codegraph.yaml"
 if [ -f "$CONFIG_FILE" ]; then
     ok "Config already exists: codegraph.yaml"
@@ -82,7 +84,7 @@ else
 fi
 
 # ── Step 3: Parse codebase (coderag parse) ────────────────────
-step "Step 3/8: Building knowledge graph"
+step "Step 3/10: Building knowledge graph"
 DB_DIR="$PROJECT_DIR/.codegraph"
 DB_PATH="$DB_DIR/graph.db"
 if [ -f "$DB_PATH" ]; then
@@ -102,7 +104,7 @@ else
 fi
 
 # ── Step 4: Validate configuration (coderag validate) ─────────
-step "Step 4/8: Validating configuration"
+step "Step 4/10: Validating configuration"
 if coderag validate "$PROJECT_DIR" 2>/dev/null; then
     ok "Validation passed"
 else
@@ -110,11 +112,11 @@ else
 fi
 
 # ── Step 5: Show graph statistics (coderag info) ──────────────
-step "Step 5/8: Graph statistics"
+step "Step 5/10: Graph statistics"
 coderag info "$PROJECT_DIR" 2>/dev/null || warn "Could not read graph stats"
 
 # ── Step 6: Semantic embeddings (coderag embed) ───────────────
-step "Step 6/8: Semantic embeddings (optional)"
+step "Step 6/10: Semantic embeddings (optional)"
 ask "Generate semantic embeddings? [y/N]"
 case "$REPLY" in
     [Yy]*)
@@ -132,7 +134,7 @@ case "$REPLY" in
 esac
 
 # ── Step 7: Install SKILL.md (OpenSkill format) ───────────────
-step "Step 7/8: Installing AI skill (OpenSkill)"
+step "Step 7/10: Installing AI skill (OpenSkill)"
 SKILL_DIR="$PROJECT_DIR/.coderag/skill"
 SKILL_MD="$SKILL_DIR/SKILL.md"
 
@@ -193,8 +195,96 @@ else
     _install_skill
 fi
 
-# ── Step 8: Verify MCP server (coderag serve --watch) ─────────
-step "Step 8/8: Verifying MCP server"
+# ── Step 8: Install CLAUDE.md (Claude Code instructions) ──────
+step "Step 8/10: Installing Claude Code instructions"
+CLAUDE_MD="$PROJECT_DIR/CLAUDE.md"
+
+_install_claude_md() {
+    local CLAUDE_SRC=""
+    local CODERAG_ROOT=""
+
+    # Try standard install location
+    if [ -d "$HOME/.coderag/src" ]; then
+        CODERAG_ROOT="$HOME/.coderag/src"
+    else
+        CODERAG_ROOT="$(python3 -c "
+import coderag, os
+print(os.path.dirname(os.path.dirname(coderag.__file__)))
+" 2>/dev/null || true)"
+    fi
+
+    if [ -n "$CODERAG_ROOT" ] && [ -f "$CODERAG_ROOT/CLAUDE.md" ]; then
+        CLAUDE_SRC="$CODERAG_ROOT/CLAUDE.md"
+    fi
+
+    if [ -n "$CLAUDE_SRC" ]; then
+        cp "$CLAUDE_SRC" "$CLAUDE_MD"
+        ok "Installed CLAUDE.md (from: $CLAUDE_SRC)"
+    else
+        # Fallback: download from GitHub
+        info "Local template not found, downloading from GitHub..."
+        if curl -fsSL "https://raw.githubusercontent.com/dmnkhorvath/coderag/main/CLAUDE.md"              -o "$CLAUDE_MD" 2>/dev/null; then
+            ok "Installed CLAUDE.md (downloaded from GitHub)"
+        else
+            err "Could not install CLAUDE.md"
+            echo "  Download manually:"
+            echo "    https://github.com/dmnkhorvath/coderag/blob/main/CLAUDE.md"
+            return 1
+        fi
+    fi
+}
+
+if [ -f "$CLAUDE_MD" ]; then
+    warn "CLAUDE.md already exists at $CLAUDE_MD"
+    ask "Overwrite? [y/N]"
+    case "$REPLY" in
+        [Yy]*) _install_claude_md ;;
+        *)     info "Keeping existing CLAUDE.md" ;;
+    esac
+else
+    _install_claude_md
+fi
+
+# ── Step 9: Install .mcp.json (MCP server config) ─────────────
+step "Step 9/10: Installing MCP server configuration"
+MCP_JSON="$PROJECT_DIR/.mcp.json"
+
+_install_mcp_json() {
+    # Detect coderag binary path
+    local CODERAG_BIN
+    CODERAG_BIN="$(command -v coderag 2>/dev/null || echo "coderag")"
+
+    cat > "$MCP_JSON" << MCPEOF
+{
+  "mcpServers": {
+    "coderag": {
+      "command": "$CODERAG_BIN",
+      "args": [
+        "serve",
+        ".",
+        "--watch"
+      ],
+      "env": {}
+    }
+  }
+}
+MCPEOF
+    ok "Created .mcp.json (command: $CODERAG_BIN serve . --watch)"
+}
+
+if [ -f "$MCP_JSON" ]; then
+    warn ".mcp.json already exists at $MCP_JSON"
+    ask "Overwrite? [y/N]"
+    case "$REPLY" in
+        [Yy]*) _install_mcp_json ;;
+        *)     info "Keeping existing .mcp.json" ;;
+    esac
+else
+    _install_mcp_json
+fi
+
+# ── Step 10: Verify MCP server (coderag serve --watch) ────────
+step "Step 10/10: Verifying MCP server"
 info "Testing MCP server startup (with file watcher)..."
 if timeout 3 coderag serve "$PROJECT_DIR" --watch </dev/null >/dev/null 2>&1; then
     ok "MCP server + file watcher starts successfully"
@@ -219,6 +309,8 @@ printf "  ${BOLD}Files created:${NC}\n"
 [ -f "$DB_PATH" ]      && echo "    ✓ .codegraph/graph.db      — knowledge graph"
 [ -f "$SKILL_MD" ]     && echo "    ✓ .coderag/skill/SKILL.md  — AI skill"
 [ -L "$PROJECT_DIR/SKILL.md" ] && echo "    ✓ SKILL.md                 — symlink"
+[ -f "$CLAUDE_MD" ]    && echo "    ✓ CLAUDE.md                — Claude Code instructions"
+[ -f "$MCP_JSON" ]     && echo "    ✓ .mcp.json                — MCP server config"
 echo ""
 printf "  ${BOLD}CLI commands used (all from SKILL.md):${NC}\n"
 echo "    coderag init              → created config"
