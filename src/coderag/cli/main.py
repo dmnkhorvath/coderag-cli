@@ -841,6 +841,8 @@ def frameworks(ctx: click.Context, fmt: str) -> None:
 
     Displays which frameworks were detected during parsing,
     along with the nodes and edges they contributed.
+    Reads from stored metadata first; falls back to live
+    detection only when no stored data is available.
     """
     config = _load_config(ctx.obj["config_path"])
     if ctx.obj["db_override"]:
@@ -849,13 +851,30 @@ def frameworks(ctx: click.Context, fmt: str) -> None:
     store = _open_store(config)
 
     try:
-        # Get detected frameworks from metadata
+        # ── Phase 1: Try stored metadata from last parse ─────
         fw_str = store.get_metadata("detected_frameworks")
-        detected = fw_str.split(",") if fw_str else []
+        detected = [fw.strip() for fw in fw_str.split(",") if fw.strip()] if fw_str else []
+        source_label = "from last parse"
+
+        # ── Phase 2: Fall back to live detection if no stored metadata ──
+        if not detected:
+            try:
+                from coderag.core.registry import PluginRegistry as _PluginRegistry
+
+                registry = _PluginRegistry()
+                registry.initialize_all()
+                project_root = str(config.project_root) if hasattr(config, "project_root") else "."
+                for detector in registry.get_framework_detectors():
+                    if detector.detect_framework(project_root):
+                        detected.append(detector.framework_name)
+                source_label = "live detection"
+            except Exception:  # noqa: BLE001
+                pass
 
         if fmt == "json":
             data: dict[str, Any] = {
                 "detected_frameworks": detected,
+                "source": source_label,
                 "framework_patterns": {},
             }
 
@@ -904,7 +923,8 @@ def frameworks(ctx: click.Context, fmt: str) -> None:
             console.print(
                 Panel(
                     Text.assemble(
-                        ("Detected Frameworks", "bold cyan"),
+                        (f"Detected frameworks ({source_label}): ", "bold cyan"),
+                        (", ".join(detected), "bold green"),
                     ),
                     expand=False,
                 )

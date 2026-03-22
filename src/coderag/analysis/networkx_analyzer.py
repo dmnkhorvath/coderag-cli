@@ -646,46 +646,64 @@ class NetworkXAnalyzer:
 
     # ── Persistence ───────────────────────────────────────────
 
+    # Maximum graph size for community detection (greedy modularity is O(n² log n))
+    _COMMUNITY_DETECTION_NODE_LIMIT = 50_000
+
     def persist_scores_to_store(self, store: SQLiteStore) -> None:
         """Batch-update pagerank and community_id columns in the nodes table.
 
         Computes PageRank scores and community assignments, then writes
         them back to the SQLite ``nodes`` table in a single transaction.
+        PageRank is persisted first so it is never blocked by slow
+        community detection on large graphs.
 
         Args:
             store: The SQLiteStore instance to persist scores to.
         """
         self._ensure_loaded()
 
-        # Compute PageRank scores
-        scores = self.pagerank()
-
-        # Compute communities and build node -> community_id mapping
-        community_map: dict[str, int] = {}
-        try:
-            community_sets = self.community_detection()
-            for community_id, members in enumerate(community_sets):
-                for node_id in members:
-                    community_map[node_id] = community_id
-        except Exception:  # noqa: BLE001
-            logger.warning("Community detection failed during persist, skipping")
-
-        # Batch-update using executemany + commit
         conn = store.connection
+
+        # ── Phase 1: PageRank (fast, always runs) ─────────────
+        scores = self.pagerank()
         if scores:
             conn.executemany(
                 "UPDATE nodes SET pagerank = ? WHERE id = ?",
                 [(score, node_id) for node_id, score in scores.items()],
             )
+            conn.commit()
+            logger.info("Persisted %d PageRank scores", len(scores))
+
+        # ── Phase 2: Community detection (skip on large graphs) ──
+        community_map: dict[str, int] = {}
+        node_count = self._graph.number_of_nodes()
+
+        if node_count > self._COMMUNITY_DETECTION_NODE_LIMIT:
+            logger.warning(
+                "Skipping community detection: graph has %s nodes "
+                "(threshold: %s)",
+                f"{node_count:,}",
+                f"{self._COMMUNITY_DETECTION_NODE_LIMIT:,}",
+            )
+        else:
+            try:
+                community_sets = self.community_detection()
+                for community_id, members in enumerate(community_sets):
+                    for node_id in members:
+                        community_map[node_id] = community_id
+            except Exception:  # noqa: BLE001
+                logger.warning("Community detection failed during persist, skipping")
+
         if community_map:
             conn.executemany(
                 "UPDATE nodes SET community_id = ? WHERE id = ?",
                 [(cid, node_id) for node_id, cid in community_map.items()],
             )
-        conn.commit()
+            conn.commit()
+            logger.info("Persisted %d community assignments", len(community_map))
 
         logger.info(
-            "Persisted scores: %d pagerank, %d community assignments",
+            "Persist complete: %d pagerank, %d community assignments",
             len(scores),
             len(community_map),
         )
