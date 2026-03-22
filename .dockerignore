@@ -1,0 +1,62 @@
+# ============================================================
+# CodeRAG - Docker Build Ignore
+# ============================================================
+
+# Version control
+.git
+.gitignore
+
+# Python artifacts
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.egg-info
+*.egg
+dist/
+build/
+*.whl
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env
+
+# CodeRAG data (regenerated inside container)
+.codegraph/
+*.db
+
+# Node.js (if present in analyzed projects)
+node_modules/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing and CI
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+tests/
+
+# Documentation (not needed in image)
+docs/
+*.md
+!README.md
+
+# Docker files (prevent recursive context)
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Misc
+*.log
+*.tmp
+tmp/

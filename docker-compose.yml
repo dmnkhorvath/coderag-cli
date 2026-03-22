@@ -1,0 +1,58 @@
+# ============================================================
+# CodeRAG - Docker Compose Configuration
+# ============================================================
+# Usage:
+#   docker compose run --rm coderag parse .
+#   docker compose up coderag-mcp
+#   docker compose up coderag-watch
+# ============================================================
+
+services:
+  # ── Main CLI Service ─────────────────────────────────────
+  # Run any coderag command against your local codebase
+  # Example: docker compose run --rm coderag parse .
+  coderag:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./:/code
+    working_dir: /code
+    environment:
+      - PYTHONUNBUFFERED=1
+    # Override CMD with your coderag command
+    # docker compose run --rm coderag parse .
+    # docker compose run --rm coderag info
+    # docker compose run --rm coderag query "find all controllers"
+
+  # ── MCP Server Service ──────────────────────────────────
+  # Runs the MCP server for AI tool integration
+  # Example: docker compose up coderag-mcp
+  coderag-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./:/code
+    working_dir: /code
+    ports:
+      - "3000:3000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: ["serve", ".", "--watch"]
+    restart: unless-stopped
+
+  # ── File Watcher Service ────────────────────────────────
+  # Watches for file changes and re-parses automatically
+  # Example: docker compose up coderag-watch
+  coderag-watch:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./:/code
+    working_dir: /code
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: ["watch", "."]
+    restart: unless-stopped

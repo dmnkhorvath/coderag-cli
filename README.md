@@ -20,6 +20,7 @@
 
 - [Features](#-features)
 - [Quick Start](#-quick-start)
+- [Docker](#-docker)
 - [Documentation](#-documentation)
 - [Cost Savings](#-cost-savings)
 - [Session Memory](#-session-memory)
@@ -227,6 +228,51 @@ $ coderag info /path/to/laravel-app
 ├── Frameworks: Laravel, React
 └── Parse time: 14.2s
 ```
+
+---
+
+## 🐳 Docker
+
+Run CodeRAG in Docker without installing Python or dependencies locally.
+
+### Quick Start
+
+```bash
+# Build the image
+docker build -t coderag .
+
+# Parse your codebase
+docker run --rm -v $(pwd):/code coderag parse .
+
+# Query the knowledge graph
+docker run --rm -v $(pwd):/code coderag query "find all controllers"
+
+# Start MCP server
+docker run --rm -v $(pwd):/code -p 3000:3000 coderag serve . --watch
+```
+
+### Docker Compose
+
+```bash
+# Parse
+docker compose run --rm coderag parse .
+
+# Start MCP server (port 3000)
+docker compose up coderag-mcp
+
+# Start file watcher
+docker compose up coderag-watch
+```
+
+### Services
+
+| Service | Description | Usage |
+|---------|-------------|-------|
+| `coderag` | Main CLI (one-off commands) | `docker compose run --rm coderag <command>` |
+| `coderag-mcp` | MCP server for AI tools | `docker compose up coderag-mcp` |
+| `coderag-watch` | File watcher (auto re-parse) | `docker compose up coderag-watch` |
+
+> 📖 Full Docker documentation: [docs/docker.md](docs/docker.md)
 
 ---
 
