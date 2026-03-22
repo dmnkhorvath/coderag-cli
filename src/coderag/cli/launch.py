@@ -88,6 +88,43 @@ def _detect_best_tool() -> str | None:
     return None
 
 
+
+def _check_for_updates_on_launch() -> None:
+    """Non-blocking update check on launch."""
+    try:
+        from coderag.updater.config import UpdateConfig
+        from coderag.updater.checker import UpdateChecker
+
+        config = UpdateConfig.load()
+        if not config.auto_check:
+            return
+
+        checker = UpdateChecker(config)
+        info = checker.check()  # Uses cache, fast
+
+        if info and info.update_available:
+            from rich.console import Console as _Console
+
+            _console = _Console(stderr=True)
+            _console.print(
+                f"[yellow]⬆ CodeRAG v{info.latest} available "
+                f"(current: v{info.current}). "
+                f"Run: coderag update install[/yellow]"
+            )
+
+            if config.auto_install:
+                from coderag.updater.installer import UpdateInstaller
+
+                installer = UpdateInstaller()
+                result = installer.install()
+                if result.success:
+                    _console.print(
+                        f"[green]✅ Auto-updated to v{result.new_version}[/green]"
+                    )
+    except Exception:  # noqa: BLE001
+        pass  # Never block launch
+
+
 @click.command()
 @click.argument("path", type=click.Path(exists=True), default=".")
 @click.argument("prompt", required=False)
@@ -113,6 +150,8 @@ def _detect_best_tool() -> str | None:
     type=int,
     help="Token budget for context pre-loading.",
 )
+
+
 @click.pass_context
 def launch(
     ctx: click.Context,
@@ -141,6 +180,7 @@ def launch(
 
     # Step 1: Detect project state
     console.print("[bold cyan]CodeRAG Smart Launcher[/bold cyan]\n")
+    _check_for_updates_on_launch()
     console.print(f"Project: [bold]{project_path}[/bold]")
 
     state_info = detect_project_state(project_path)

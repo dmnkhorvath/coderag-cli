@@ -2603,3 +2603,7 @@ if __name__ == "__main__":
 from coderag.cli.benchmark_cost import benchmark  # noqa: E402
 
 cli.add_command(benchmark)
+
+from coderag.cli.update import update  # noqa: E402
+
+cli.add_command(update)
