@@ -682,7 +682,7 @@ class TestDockerFiles:
 
     @pytest.fixture
     def repo_root(self):
-        return Path("/tmp/coderag")
+        return Path(__file__).resolve().parent.parent
 
     def test_dockerfile_exists(self, repo_root):
         assert (repo_root / "Dockerfile").exists()
