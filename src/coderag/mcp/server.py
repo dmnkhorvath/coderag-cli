@@ -26,6 +26,7 @@ from coderag.session.store import SessionStore
 from .resources import register_resources
 from .tools import register_tools
 from .session_tools import register_session_tools
+from .token_tools import register_token_tools
 
 logger = logging.getLogger(__name__)
 
@@ -242,6 +243,9 @@ def create_server(
     # Register session tools (uses same database for session tables)
     session_store = SessionStore(str(resolved_db))
     register_session_tools(mcp, session_store)
+
+    # Register token counting and cost tracking tools
+    register_token_tools(mcp)
 
     stats = ctx.analyzer.get_statistics()
     logger.info(

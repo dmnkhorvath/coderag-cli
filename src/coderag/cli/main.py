@@ -2599,3 +2599,7 @@ def monitor(path: str, config_path: str | None) -> None:
 
 if __name__ == "__main__":
     cli()
+
+from coderag.cli.benchmark_cost import benchmark  # noqa: E402
+
+cli.add_command(benchmark)

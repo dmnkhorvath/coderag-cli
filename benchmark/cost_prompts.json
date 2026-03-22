@@ -1,0 +1,58 @@
+[
+    {
+        "task": "Find the main entry point",
+        "description": "Locate the primary entry point of the application",
+        "without_strategy": "grep_files",
+        "with_tool": "architecture",
+        "keywords": ["main", "entry", "app", "index"]
+    },
+    {
+        "task": "Understand a symbol",
+        "description": "Look up a specific class/function and understand its role",
+        "without_strategy": "read_file",
+        "with_tool": "lookup_symbol",
+        "keywords": ["class", "function", "method", "definition"]
+    },
+    {
+        "task": "Find all usages of a symbol",
+        "description": "Find everywhere a specific symbol is used",
+        "without_strategy": "grep_codebase",
+        "with_tool": "find_usages",
+        "keywords": ["usage", "reference", "call", "import"]
+    },
+    {
+        "task": "Impact analysis",
+        "description": "Understand what would break if a file is changed",
+        "without_strategy": "read_dependents",
+        "with_tool": "impact_analysis",
+        "keywords": ["impact", "break", "dependent", "change"]
+    },
+    {
+        "task": "Find API routes",
+        "description": "List all API routes and their handlers",
+        "without_strategy": "grep_routes",
+        "with_tool": "find_routes",
+        "keywords": ["route", "endpoint", "api", "handler"]
+    },
+    {
+        "task": "Search for a concept",
+        "description": "Find code related to a specific concept",
+        "without_strategy": "grep_files",
+        "with_tool": "search",
+        "keywords": ["search", "find", "concept", "pattern"]
+    },
+    {
+        "task": "Get file context",
+        "description": "Understand a specific file's role and connections",
+        "without_strategy": "read_file",
+        "with_tool": "file_context",
+        "keywords": ["file", "context", "role", "connection"]
+    },
+    {
+        "task": "Dependency analysis",
+        "description": "Understand the dependency tree of a module",
+        "without_strategy": "read_imports",
+        "with_tool": "dependency_graph",
+        "keywords": ["dependency", "import", "require", "module"]
+    }
+]
