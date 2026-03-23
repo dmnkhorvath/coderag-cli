@@ -66,7 +66,29 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: pip install -e '.[all]'
+        run: |
+          pip install -e '.[all]'
+          pip install tree-sitter-rust
+
+      - name: Verify parser grammars
+        run: |
+          python - <<'PY'
+          import importlib
+          modules = [
+              'tree_sitter',
+              'tree_sitter_php',
+              'tree_sitter_javascript',
+              'tree_sitter_typescript',
+              'tree_sitter_python',
+              'tree_sitter_css',
+              'tree_sitter_scss',
+              'tree_sitter_go',
+              'tree_sitter_rust',
+          ]
+          for name in modules:
+              importlib.import_module(name)
+              print(f'OK {name}')
+          PY
 
       - name: Run tests
         run: pytest -v --tb=short --junitxml=test-results.xml
