@@ -1,178 +1,36 @@
-<div align="center">
-
 # 🧠 CodeRAG
 
-**Build knowledge graphs from your codebase for LLM context retrieval**
+**Build knowledge graphs from your codebase for smarter AI coding assistants**
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Tests: 1,308 passing](https://img.shields.io/badge/tests-1%2C308%20passing-brightgreen.svg)](#-testing)
-[![Lines: 32K+](https://img.shields.io/badge/lines-32K%2B-informational.svg)](#-codebase-stats)
-[![CI](https://github.com/dmnkhorvath/coderag/actions/workflows/ci.yml/badge.svg)](https://github.com/dmnkhorvath/coderag/actions/workflows/ci.yml)
+[![Tests](https://github.com/dmnkhorvath/coderag/actions/workflows/ci.yml/badge.svg)](https://github.com/dmnkhorvath/coderag/actions/workflows/ci.yml)
 
-*Parse PHP, JavaScript, TypeScript, Python, CSS, and SCSS codebases into rich knowledge graphs with framework detection, cross-language analysis, and MCP server integration for AI-powered code understanding.*
-
-</div>
+CodeRAG parses your codebase using tree-sitter AST analysis, builds a rich knowledge graph of symbols and relationships, and serves that intelligence to AI coding assistants via an MCP server. It understands classes, functions, routes, components, cross-language connections, and framework patterns — giving your AI tools deep structural awareness instead of naive file reading.
 
 ---
 
-## 📋 Table of Contents
+## ✨ Key Features
 
-- [Features](#-features)
-- [Quick Start](#-quick-start)
-- [Docker](#-docker)
-- [Documentation](#-documentation)
-- [Cost Savings](#-cost-savings)
-- [Session Memory](#-session-memory)
-- [Auto-Update](#-auto-update)
-- [CLI Reference](#-cli-reference)
-- [TUI Monitor](#-tui-monitor)
-- [MCP Server](#-mcp-server)
-- [Framework Detection](#-framework-detection)
-- [Export Formats](#-export-formats)
-- [Configuration](#%EF%B8%8F-configuration)
-- [Architecture](#-architecture)
-- [Plugin Development](#-plugin-development)
-- [Performance Benchmarks](#-performance-benchmarks)
-- [Testing](#-testing)
-- [Contributing](#-contributing)
-- [License](#-license)
-
----
-
-## 🖥️ TUI Monitor
-
-CodeRAG includes a real-time terminal dashboard for monitoring the parsing pipeline.
-
-### Dashboard Wireframe
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  🧠 CodeRAG Monitor   ▶ Parsing   Phase: Extraction   ⏱ 00:12   [1][2][3] │
-├──────────┬──────────┬──────────┬──────────┬──────────────────────────────────┤
-│  Files   │  Nodes   │  Edges   │  Errors  │  Throughput                     │
-│   142    │  3,847   │  8,291   │    2     │  ▁▃▅▇▆▄▃▅▇█▇▅▃▂               │
-├──────────┴──────────┴──────────┴──────────┴──────────────────────────────────┤
-│  Pipeline Progress                                                          │
-│  ✓ Discovery  ✓ Hashing  ▶ Extraction  ○ Resolution  ○ Frameworks  ...     │
-│  ████████████████████████░░░░░░░░░░░░░░░░░░░░░░░░░░  42%                   │
-├─────────────────────────────────────────────────────────────────────────────┤
-│  Log Output                                                     [filtered] │
-│  20:15:03 INFO  Parsing src/php/UserController.php                         │
-│  20:15:03 INFO  Found 3 classes, 8 methods                                 │
-│  20:15:04 WARN  Unresolved import: App\Services\Cache                      │
-│  20:15:04 INFO  Parsing src/js/api.js                                      │
-│  20:15:04 INFO  Found 3 functions, 2 imports                               │
-├─────────────────────────────────────────────────────────────────────────────┤
-│  CPU ████████░░ 42%    MEM ██████░░░░ 31%                                  │
-├─────────────────────────────────────────────────────────────────────────────┤
-│  1:Dashboard  2:Logs  3:Details  4:Graph  ?:Help  q:Quit  gg/G:Top/Bot    │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-### Installation
-
-```bash
-pip install coderag[tui]
-```
-
-### Usage
-
-```bash
-# Monitor a project's parsing pipeline in real-time
-coderag monitor /path/to/project
-
-# Monitor with verbose output
-coderag monitor /path/to/project --verbose
-```
-
-### Screens
-
-| Key | Screen | Description |
-|-----|--------|-------------|
-| `1` | **Dashboard** | Main overview with metrics, progress, logs, and resource usage |
-| `2` | **Logs** | Full-screen log viewer with regex search and level filtering |
-| `3` | **Details** | File metadata with nodes and edges in sortable tables |
-| `4` | **Graph** | SQLite graph statistics by language, node kind, and edge kind |
-| `?` | **Help** | Modal overlay with complete keybinding reference |
-
-### Keybinding Reference
-
-| Key | Action |
-|-----|--------|
-| `j` / `k` | Scroll down / up |
-| `G` | Jump to bottom |
-| `gg` | Jump to top (two-key vim sequence) |
-| `Ctrl+d` / `Ctrl+u` | Half-page down / up |
-| `Ctrl+f` / `Ctrl+b` | Full-page down / up |
-| `f` | Toggle auto-follow in logs |
-| `d` / `i` / `w` / `e` | Filter: Debug / Info / Warning / Error |
-| `a` | Show all log levels |
-| `/` | Search logs (regex) |
-| `n` / `N` | Next / previous search match |
-| `s` | Save logs to file |
-| `y` | Yank (copy) logs |
-| `r` | Refresh graph statistics |
-| `h` / `l` | Switch tabs in Details screen |
-| `:` | Enter command mode |
-| `q` | Quit |
-
-### Command Mode
-
-Press `:` to enter command mode (vim-style):
-
-| Command | Action |
-|---------|--------|
-| `:q` | Quit the application |
-| `:w` | Save current logs to file |
-| `:filter <level>` | Set log filter (DEBUG, INFO, WARNING, ERROR) |
-| `:set wrap` | Enable line wrapping |
-| `:set nowrap` | Disable line wrapping |
-| `Escape` | Cancel command mode |
-
-### Features
-
-- **Real-time metrics** — Files parsed, nodes/edges created, error count, throughput sparkline
-- **9-phase pipeline progress** — Visual indicators (✓ complete, ▶ active, ○ pending) with progress bar
-- **Filterable logs** — Level-based filtering, regex search, auto-follow, save/copy
-- **Resource monitoring** — Live CPU and memory usage bars via psutil
-- **Post-parse summary** — Modal overlay showing total parse time, files, nodes, edges, languages detected
-- **Vim keybindings** — Full vim-style navigation including `gg`, `G`, `j/k`, `Ctrl+d/u`
-- **Command mode** — Vim `:` command input for quit, save, filter, and settings
-- **Responsive layout** — Adapts to terminal sizes from 80×24 to 200×60+
-- **Dark theme** — Custom emerald/cyan accent color scheme optimized for terminals
-
-### ⚡ Performance & Developer Experience
-
-- 🔄 **Live file watching** with auto-reparse (`coderag watch`)
-- ⚡ **Parallel pipeline** — phases 3-5 and 7 run in parallel
-- 🔍 **Full CLI parity** — all 8 MCP tools available as CLI commands
-
----
-
-## 🤖 MCP Server Integration
-- **8 tools** for AI agents to query the knowledge graph
-- **3 resources** providing passive context (summary, architecture, file map)
-- **Hot-reload** — Automatically detects database changes
-- **Token budgeting** — Responses sized to fit LLM context windows
-- **Automated setup** — `install-coderag.sh` handles full project setup including `.mcp.json` and `CLAUDE.md` generation
-
-### 📦 Export & Output
-- **3 formats** — Markdown, JSON, Tree
-- **4 scopes** — Full graph, architecture overview, file context, symbol context
-- **Rich CLI** — Colored terminal output with progress indicators
-- **Token-budgeted** — Control output size for LLM consumption
+- 🌐 **7 Languages** — PHP, JavaScript, TypeScript, Python, CSS, SCSS + Vue SFC
+- 🏗️ **11 Framework Detectors** — Laravel, Symfony, React, Express, Next.js, Vue, Angular, Django, Flask, FastAPI, Tailwind CSS
+- 🤖 **MCP Server** — 16 tools for Claude Code, Cursor, and Codex CLI integration
+- 📊 **Graph Analysis** — PageRank, community detection, blast radius, dependency graphs
+- 🔍 **Hybrid Search** — FTS5 full-text + FAISS vector semantic search
+- 🔗 **Cross-Language** — Matches PHP routes to JS fetch calls, Python APIs to TS clients
+- 💰 **86% Token Savings** — Proven cost reduction in AI coding sessions
+- 🧠 **Session Memory** — Cross-session context persistence
+- 🐳 **Docker Ready** — One-command deployment
+- 📈 **Battle-Tested** — 7 dogfood sessions, 17 bugs found & fixed, 255K+ nodes parsed
 
 ---
 
 ## 🚀 Quick Start
 
-> 📖 **New to CodeRAG?** See the full [Quick Start Guide](docs/quickstart.md) for a step-by-step walkthrough.
-
 ### Prerequisites
 
-- Python 3.11 or higher
-- pip package manager
+- Python 3.11+
+- pip
 
 ### Installation
 
@@ -180,437 +38,174 @@ Press `:` to enter command mode (vim-style):
 # Clone and install
 git clone https://github.com/dmnkhorvath/coderag.git
 cd coderag
-pip install -e .
-
-# Verify installation
-coderag --help
+pip install -e '.[all]'
 ```
 
-**One-line install:**
-```bash
-curl -fsSL https://raw.githubusercontent.com/dmnkhorvath/coderag/main/install.sh | sh
-```
-
-**Set up a project** (parses, configures MCP, installs AI skill files):
-```bash
-curl -fsSL https://raw.githubusercontent.com/dmnkhorvath/coderag/main/install-coderag.sh | sh -s /path/to/project
-```
-
-### Parse Your First Project
+Or use the automated installer:
 
 ```bash
-# 1. Initialize configuration
-cd /path/to/your/project
-coderag init
-
-# 2. Parse the codebase
-coderag parse .
-
-# 3. Explore the knowledge graph
-coderag info .
-coderag query --name "UserController" .
-
-# 4. Start MCP server for AI integration
-coderag serve .
+curl -fsSL https://raw.githubusercontent.com/dmnkhorvath/coderag/main/install-coderag.sh | sh
 ```
 
-### Example Output
+### Parse a Codebase
 
+```bash
+# Parse your project
+coderag parse /path/to/project
+
+# Explore the graph
+coderag info
+coderag query MyClass
+coderag find-usages UserController
+coderag architecture
 ```
-$ coderag info /path/to/laravel-app
 
-📊 Knowledge Graph Summary
-├── Project: laravel-app
-├── Files: 1,536 (PHP: 1,200 | JS: 236 | TS: 100)
-├── Nodes: 30,474
-├── Edges: 62,097
-├── Communities: 45
-├── Frameworks: Laravel, React
-└── Parse time: 14.2s
+### Launch with AI
+
+```bash
+# One command — parse, configure MCP, launch AI tool
+coderag launch /path/to/project --tool claude-code
+
+# Or start the MCP server standalone
+coderag serve /path/to/project --watch
 ```
 
 ---
 
-## 🐳 Docker
+## 🔬 How It Works
 
-Run CodeRAG in Docker without installing Python or dependencies locally.
+1. **Parse** — Tree-sitter AST extracts symbols (classes, functions, routes, components) across 7 languages
+2. **Resolve** — Cross-file references resolved with 4-strategy matching (exact, suffix, short name, placeholder)
+3. **Serve** — MCP server provides graph intelligence to AI coding tools with 16 specialized tools
 
-### Quick Start
-
-```bash
-# Build the image
-docker build -t coderag .
-
-# Parse your codebase
-docker run --rm -v $(pwd):/code coderag parse .
-
-# Query the knowledge graph
-docker run --rm -v $(pwd):/code coderag query "find all controllers"
-
-# Start MCP server
-docker run --rm -v $(pwd):/code -p 3000:3000 coderag serve . --watch
 ```
-
-### Docker Compose
-
-```bash
-# Parse
-docker compose run --rm coderag parse .
-
-# Start MCP server (port 3000)
-docker compose up coderag-mcp
-
-# Start file watcher
-docker compose up coderag-watch
+Your Codebase          CodeRAG                    AI Tool
+┌──────────┐    ┌─────────────────┐    ┌──────────────────┐
+│ .php     │    │ Tree-sitter AST │    │ Claude Code      │
+│ .ts/.js  │───▶│ Knowledge Graph │───▶│ Cursor           │
+│ .py      │    │ MCP Server      │    │ Codex CLI        │
+│ .css     │    └─────────────────┘    └──────────────────┘
+└──────────┘
 ```
-
-### Services
-
-| Service | Description | Usage |
-|---------|-------------|-------|
-| `coderag` | Main CLI (one-off commands) | `docker compose run --rm coderag <command>` |
-| `coderag-mcp` | MCP server for AI tools | `docker compose up coderag-mcp` |
-| `coderag-watch` | File watcher (auto re-parse) | `docker compose up coderag-watch` |
-
-> 📖 Full Docker documentation: [docs/docker.md](docs/docker.md)
 
 ---
 
-## 📚 Documentation
+## 🌐 Supported Languages & Frameworks
 
-Comprehensive guides for every CodeRAG feature:
-
-| Guide | Description |
-|-------|-------------|
-| [Quick Start](docs/quickstart.md) | Installation, first parse, first query, first AI session |
-| [Smart Launcher](docs/launcher.md) | One-command AI session setup with `--dry-run`, `--context-only`, and `--token-budget` |
-| [Session Memory](docs/session-memory.md) | Cross-session context persistence — decisions, tasks, facts, hot files |
-| [Cost Savings](docs/cost-savings.md) | Token cost benchmarking methodology and results (86.4% savings) |
-| [AI Tool Setup](docs/ai-tool-setup.md) | Configure Claude Code, Cursor, or Codex CLI with MCP integration |
-
-Additional documentation:
-- [Architecture Design](docs/architecture/) — System design and component diagrams
-- [Development Plan](docs/plan/) — Roadmap and phase tracking
-- [Research Notes](docs/research/) — Language parsing, framework detection, and cross-language analysis research
+| Language | Extensions | Node Types | Framework Detectors |
+|----------|-----------|------------|--------------------|
+| PHP | `.php`, `.blade.php` | class, function, method, trait, interface, enum, constant | Laravel, Symfony |
+| JavaScript | `.js`, `.jsx`, `.mjs`, `.cjs` | class, function, arrow_function, component, export | Express, React |
+| TypeScript | `.ts`, `.tsx`, `.mts`, `.cts`, `.vue` | class, function, interface, type_alias, enum, component | Next.js, Vue, Angular |
+| Python | `.py` | class, function, method, decorator | Django, Flask, FastAPI |
+| CSS | `.css` | selector, variable, keyframes, media_query, layer | Tailwind CSS |
+| SCSS | `.scss` | selector, variable, mixin, function, placeholder | — |
 
 ---
 
-## 💰 Cost Savings
-
-CodeRAG reduces AI coding tool token costs by providing precise, graph-ranked context instead of dumping entire files into the context window.
-
-**Benchmark results** against the [Slim PHP framework](https://github.com/slimphp/Slim) (125 files, 1,883 nodes, 7,998 edges):
-
-| Metric | Without CodeRAG | With CodeRAG | Savings |
-|--------|----------------:|-------------:|--------:|
-| Avg tokens/task | 17,617 | 2,400 | **86.4%** |
-| Est. cost/month (100 tasks) | $42.28 | $5.76 | **86.4%** |
-
-Supports 8 pricing models: Claude Sonnet 4, Claude Opus 4, Claude Haiku 3.5, GPT-4o, GPT-4.1, GPT-4.1 Mini, Gemini 2.5 Pro, Gemini 2.5 Flash.
-
-```bash
-# Run your own benchmark
-coderag benchmark /path/to/project
-coderag benchmark /path/to/project --model gpt-4o --format markdown
-```
-
-> 📖 See [Cost Savings Guide](docs/cost-savings.md) for full methodology and per-task breakdown.
-
----
-
-## 🧠 Session Memory
-
-Session Memory gives CodeRAG cross-session context persistence. It tracks file reads, edits, queries, decisions, tasks, and facts — then injects the most relevant context into future AI sessions.
-
-```bash
-# View recent sessions
-coderag session list
-
-# View persisted decisions, tasks, and facts
-coderag session context
-
-# Session context is auto-injected into AI sessions
-coderag launch . --context-only
-```
-
-8 MCP tools let AI assistants log and query session data automatically. Context injection is token-budgeted and priority-ordered: hot files → decisions → tasks → facts → recent activity.
-
-> 📖 See [Session Memory Guide](docs/session-memory.md) for full details.
-
----
-
-## 🔄 Auto-Update
-
-CodeRAG includes a built-in update system that checks for new releases from GitHub:
-
-```bash
-# Check for updates
-coderag update check
-
-# View update configuration
-coderag update config
-
-# Install latest update
-coderag update install
-```
-
-Configuration options:
-- **Auto-check**: Enabled by default (checks every 2 hours)
-- **Auto-install**: Disabled by default (manual install required)
-- **Channel**: `stable` (only stable releases)
-- **GitHub repo**: `dmnkhorvath/coderag`
-
----
-
-## 💻 CLI Reference
-
-### `coderag init`
-
-Initialize a `codegraph.yaml` configuration file.
-
-```bash
-coderag init                                    # Interactive setup
-coderag init --languages php,typescript         # Specify languages
-coderag init --name "my-project"                # Set project name
-```
-
-### `coderag parse`
-
-Parse a codebase and build the knowledge graph.
-
-```bash
-coderag parse .                                 # Parse current directory
-coderag parse /path/to/project                  # Parse specific project
-coderag parse . --incremental                   # Only re-parse changed files
-coderag parse . --parallel                      # Use parallel extraction
-```
-
-### `coderag info`
-
-Display knowledge graph statistics.
-
-```bash
-coderag info .                                  # Show graph summary
-coderag info . --db custom/path/graph.db        # Use custom database path
-```
-
-### `coderag query`
-
-Query the knowledge graph for symbols and relationships.
-
-```bash
-coderag query --name "User" .                   # Search by name
-coderag query --name "UserController" --kind class .  # Filter by kind
-coderag query --name "App\\Models\\User" --depth 2 .    # Traverse neighbors
-```
-
-### `coderag export`
-
-Export knowledge graph data in various formats.
-
-```bash
-coderag export                                  # Architecture overview (markdown)
-coderag export -f json -s full                  # Full graph as JSON
-coderag export -s symbol --symbol User          # Symbol context
-coderag export -s file --file app/User.php      # File context
-coderag export -f tree -s full                  # Repository map tree view
-coderag export --tokens 16000 -o out.md         # Custom token budget, save to file
-```
-
-| Option | Values | Default | Description |
-|--------|--------|---------|-------------|
-| `-f, --format` | `markdown`, `json`, `tree` | `markdown` | Output format |
-| `-s, --scope` | `full`, `architecture`, `file`, `symbol` | `architecture` | Export scope |
-| `--symbol` | string | — | Symbol name (for symbol scope) |
-| `--file` | path | — | File path (for file scope) |
-| `--tokens` | int | `8000` | Token budget |
-| `--top` | int | `20` | Top N items for architecture |
-| `--depth` | int | `2` | Traversal depth for symbol scope |
-| `-o, --output` | path | stdout | Output file path |
-
-### `coderag analyze`
-
-Run graph analysis algorithms.
-
-```bash
-coderag analyze .                               # Full analysis
-coderag analyze . --top 20                      # Show top 20 results
-```
-
-### `coderag architecture`
-
-Generate architecture overview with community detection.
-
-```bash
-coderag architecture .                          # Architecture report
-```
-
-### `coderag frameworks`
-
-Detect and report framework usage.
-
-```bash
-coderag frameworks .                            # Detect all frameworks
-```
-
-### `coderag cross-language`
-
-Analyze cross-language connections (PHP routes ↔ JS API calls).
-
-```bash
-coderag cross-language .                        # Find cross-language matches
-```
-
-### `coderag enrich`
-
-Enrich the knowledge graph with additional metadata.
-
-```bash
-coderag enrich --phpstan                        # Run PHPStan enrichment
-coderag enrich --phpstan --level 8              # Custom analysis level (0-9)
-coderag enrich --phpstan --phpstan-path vendor/bin/phpstan  # Custom binary
-```
-
-### `coderag serve`
-
-Start the MCP server for AI agent integration.
-
-```bash
-coderag serve .                                 # Start with stdio transport
-coderag serve . --db custom/graph.db            # Custom database path
-coderag serve . --no-reload                     # Disable hot-reload
-```
-
-### `coderag find-usages`
-
-Find all usages of a symbol across the codebase.
-
-```bash
-coderag find-usages UserService                          # Find all usages
-coderag find-usages UserService --types calls,imports     # Filter by type
-coderag find-usages UserService --depth 2 --format json   # Transitive, JSON output
-```
-
-| Option | Description |
-|--------|-------------|
-| `--types` | Comma-separated usage types: calls, imports, extends, implements, instantiates, type_references, all |
-| `--depth` | Transitive traversal depth (default: 1) |
-| `-f, --format` | Output format: markdown, json (default: markdown) |
-
-### `coderag impact`
-
-Analyze the blast radius of changing a symbol.
-
-```bash
-coderag impact UserService                    # Blast radius analysis
-coderag impact UserService --depth 3          # Deeper analysis
-coderag impact UserService --format json      # JSON output
-```
-
-| Option | Description |
-|--------|-------------|
-| `--depth` | Impact analysis depth, 1-5 (default: 3) |
-| `-f, --format` | Output format: markdown, json (default: markdown) |
-
-### `coderag file-context`
-
-Get LLM-optimized context for a specific file.
-
-```bash
-coderag file-context app/Services/UserService.php           # File overview
-coderag file-context app/Services/UserService.php --no-source  # Without source code
-```
-
-| Option | Description |
-|--------|-------------|
-| `--no-source` | Exclude source code snippets |
-| `--budget` | Token budget (default: 4000) |
-
-### `coderag routes`
-
-Find API routes by pattern with optional filtering.
-
-```bash
-coderag routes "/api/users/*"                  # Find routes by pattern
-coderag routes "/api/*" --method GET           # Filter by HTTP method
-coderag routes "/api/*" --no-frontend          # Exclude frontend callers
-```
-
-| Option | Description |
-|--------|-------------|
-| `--method` | Filter by HTTP method: GET, POST, PUT, PATCH, DELETE, ANY |
-| `--no-frontend` | Exclude frontend API callers |
-| `-f, --format` | Output format: markdown, json (default: markdown) |
-
-### `coderag deps`
-
-Show the dependency graph for a symbol.
-
-```bash
-coderag deps UserService                       # Show dependency graph
-coderag deps UserService --direction dependents # Only show dependents
-coderag deps UserService --depth 3             # Deeper traversal
-```
-
-| Option | Description |
-|--------|-------------|
-| `--direction` | dependencies, dependents, or both (default: both) |
-| `--depth` | Traversal depth, 1-5 (default: 2) |
-| `-f, --format` | Output format: markdown, json (default: markdown) |
-
-### `coderag watch`
-
-Watch the filesystem for changes and auto-reparse.
-
-```bash
-coderag watch .                                # Watch current directory
-coderag watch /path/to/project --debounce 2.0  # Custom debounce
-coderag watch . --no-incremental               # Full reparse on changes
-```
-
-| Option | Description |
-|--------|-------------|
-| `--debounce` | Debounce delay in seconds (default: 1.0) |
-| `--no-incremental` | Full reparse instead of incremental |
-
+## 📋 CLI Reference
+
+| Command | Description |
+|---------|-------------|
+| `coderag parse <path>` | Parse codebase and build knowledge graph |
+| `coderag query <symbol>` | Search for symbols by name |
+| `coderag info [path]` | Show graph statistics |
+| `coderag find-usages <symbol>` | Find all usages of a symbol |
+| `coderag deps <symbol>` | Show dependency graph |
+| `coderag analyze <symbol>` | Deep analysis with PageRank and centrality |
+| `coderag architecture` | Show architecture overview |
+| `coderag frameworks` | Show detected frameworks |
+| `coderag cross-language` | Show cross-language connections |
+| `coderag routes` | List all detected routes |
+| `coderag impact <symbol>` | Blast radius analysis |
+| `coderag file-context <file>` | Get context for a specific file |
+| `coderag export` | Export graph in markdown/json/tree format |
+| `coderag enrich` | Enrich graph with git history |
+| `coderag watch <path>` | Watch for file changes and auto-reparse |
+| `coderag serve` | Start MCP server for AI tools |
+| `coderag launch <path>` | Smart launcher — parse, configure, launch AI tool |
+| `coderag visualize <path>` | Generate interactive D3.js graph visualization |
+| `coderag benchmark <path>` | Token cost benchmarking |
+| `coderag session list` | List coding sessions |
+| `coderag session show <id>` | Show session details |
+| `coderag session context` | Show session context |
+| `coderag update check` | Check for updates |
+| `coderag update install` | Install latest version |
+| `coderag init` | Initialize configuration |
 
 ---
 
 ## 🤖 MCP Server
 
-CodeRAG includes a full [Model Context Protocol](https://modelcontextprotocol.io/) server that exposes the knowledge graph to AI agents.
+CodeRAG includes a Model Context Protocol (MCP) server that exposes the knowledge graph to AI coding assistants. Start it with `coderag serve` or automatically via `coderag launch`.
 
-### Tools
+### Code Intelligence Tools (8)
 
-| Tool | Description | Key Parameters |
-|------|-------------|----------------|
-| `coderag_lookup_symbol` | Look up a symbol\'s definition, relationships, and context | `symbol`, `detail_level`, `token_budget` |
-| `coderag_find_usages` | Find all usages of a symbol (calls, imports, extends, etc.) | `symbol`, `usage_types`, `max_depth` |
-| `coderag_impact_analysis` | Analyze blast radius of changing a symbol | `symbol`, `max_depth`, `token_budget` |
-| `coderag_file_context` | Get all symbols and relationships in a file | `file_path`, `token_budget` |
-| `coderag_find_routes` | Find API routes with optional HTTP method filtering | `pattern`, `http_method` |
-| `coderag_search` | Full-text search across the knowledge graph | `query`, `kind_filter`, `limit` |
-| `coderag_architecture` | Get architecture overview with configurable focus | `focus`, `token_budget` |
-| `coderag_dependency_graph` | Get dependency graph for a symbol | `symbol`, `direction`, `max_depth` |
+| Tool | Description |
+|------|-------------|
+| `coderag_lookup_symbol` | Look up a symbol — definition, relationships, and context |
+| `coderag_find_usages` | Find all usages — calls, imports, extensions, implementations |
+| `coderag_impact_analysis` | Blast radius analysis for a symbol or file change |
+| `coderag_file_context` | Get full context for a file — symbols, relationships, importance |
+| `coderag_find_routes` | Find API routes and their frontend callers |
+| `coderag_search` | Full-text and semantic search across the knowledge graph |
+| `coderag_architecture` | High-level architecture overview with key metrics |
+| `coderag_dependency_graph` | Dependency graph for a symbol or file |
 
-### Resources
+### Session Memory Tools (8)
 
-| URI | Description |
-|-----|-------------|
-| `coderag://summary` | Knowledge graph statistics and project overview |
-| `coderag://architecture` | High-level architecture with communities and important nodes |
-| `coderag://file-map` | Annotated file tree showing symbols per file |
+| Tool | Description |
+|------|-------------|
+| `session_log_read` | Log a file read event |
+| `session_log_edit` | Log a file edit event |
+| `session_log_decision` | Log an architectural decision |
+| `session_log_task` | Log a task completion |
+| `session_log_fact` | Log a discovered fact |
+| `session_get_history` | Get session history |
+| `session_get_hot_files` | Get frequently accessed files |
+| `session_get_context` | Get session context for pre-loading |
 
-### Usage with Claude Desktop
+### Resources (3)
 
-Add to your `claude_desktop_config.json`:
+| Resource | Description |
+|----------|-------------|
+| `coderag://summary` | Project summary with key metrics |
+| `coderag://architecture` | Architecture overview |
+| `coderag://file-map` | Complete file map of the project |
 
+### AI Tool Configuration
+
+**Claude Code** — auto-configured via `coderag launch --tool claude-code`:
 ```json
 {
   "mcpServers": {
     "coderag": {
       "command": "coderag",
-      "args": ["serve", "/path/to/your/project"]
+      "args": ["serve", ".", "--watch"]
+    }
+  }
+}
+```
+
+**Cursor** — auto-configured via `coderag launch --tool cursor`:
+```json
+{
+  "mcpServers": {
+    "coderag": {
+      "command": "coderag",
+      "args": ["serve", ".", "--watch"]
+    }
+  }
+}
+```
+
+**Codex CLI** — auto-configured via `coderag launch --tool codex`:
+```json
+{
+  "mcpServers": {
+    "coderag": {
+      "command": "coderag",
+      "args": ["serve", ".", "--watch"]
     }
   }
 }
@@ -618,387 +213,128 @@ Add to your `claude_desktop_config.json`:
 
 ---
 
-## 🏗️ Framework Detection
+## 🐳 Docker
 
-CodeRAG automatically detects and enriches framework-specific patterns across **11 framework detectors**:
-
-### Laravel (PHP)
-- Route definitions (`Route::get`, `Route::resource`, etc.)
-- Eloquent models and relationships
-- Middleware registration
-- Event/listener patterns
-- Blade template references
-
-### Symfony (PHP)
-- Route definitions (PHP 8 attributes, YAML, XML config)
-- Service container and dependency injection
-- Doctrine ORM entity mapping
-- Twig template references
-- Event dispatcher patterns
-
-### React (JavaScript/TypeScript)
-- Functional and class components
-- Hook usage (`useState`, `useEffect`, custom hooks)
-- Context providers and consumers
-- Component prop passing
-
-### Express.js (JavaScript)
-- Route handlers (`app.get`, `router.post`, etc.)
-- Middleware chains
-- Error handlers
-- Router mounting
-
-### Next.js (JavaScript/TypeScript)
-- File-based routing (pages and app directory)
-- Server and client components (`\'use server\'`, `\'use client\'`)
-- API routes
-- Middleware
-- Dynamic routes and route groups
-
-### Vue (JavaScript/TypeScript)
-- Single-file components (`.vue`)
-- Composition API (`ref`, `computed`, `watch`)
-- Pinia store detection
-- Component registration
-
-### Angular (TypeScript)
-- Component, Module, Injectable decorators
-- Dependency injection via constructors
-- Routing module configuration
-- Standalone components and signals
-
-### Django (Python)
-- URL patterns and path definitions
-- Model classes and field relationships
-- View functions and class-based views
-- Template tag detection
-
-### Flask (Python)
-- Route decorators and blueprints
-- Extension detection
-- Application factory patterns
-
-### FastAPI (Python)
-- Path operation decorators
-- Dependency injection with `Depends()`
-- Pydantic model integration
-- Router mounting
-
-### Tailwind CSS
-- **v3**: `tailwind.config.js/ts/cjs/mjs` parsing, `@tailwind` directives, `content` path scanning
-- **v4**: CSS-first configuration with `@import \'tailwindcss\'`, `@theme` blocks, `@source`, `@utility`, `@custom-variant`
-- Theme token extraction and `@apply` edge detection
-- Cross-language Tailwind class→theme token matching
-
----
-
-## 📤 Export Formats
-
-### Markdown
-Structured markdown optimized for LLM consumption with headers, code blocks, and relationship tables.
-
-### JSON
-Complete graph data as structured JSON — ideal for programmatic consumption and custom tooling.
-
-### Tree
-Repository map showing file structure annotated with symbol counts — great for orientation.
-
----
-
-## ⚙️ Configuration
-
-CodeRAG uses a `codegraph.yaml` file in your project root:
-
-```yaml
-# codegraph.yaml
-project:
-  name: my-project
-  root: .
-
-languages:
-  php:
-    enabled: true
-    extensions: [".php"]
-  javascript:
-    enabled: true
-    extensions: [".js", ".jsx", ".mjs", ".cjs"]
-  typescript:
-    enabled: true
-    extensions: [".ts", ".tsx"]
-  python:
-    enabled: true
-    extensions: [".py"]
-  css:
-    enabled: true
-    extensions: [".css"]
-  scss:
-    enabled: true
-    extensions: [".scss"]
-
-storage:
-  backend: sqlite
-  path: .codegraph/graph.db
-
-output:
-  default_format: markdown
-  max_tokens: 8000
-
-ignore:
-  - node_modules/
-  - vendor/
-  - .git/
-  - "*.min.js"
-  - dist/
-  - build/
+```bash
+# Quick start
+docker compose up -d
 ```
 
-Generate a default config with `coderag init`.
+### Services
 
----
+| Service | Description | Port |
+|---------|-------------|------|
+| `cli` | CodeRAG CLI for parsing and queries | — |
+| `mcp` | MCP server for AI tool integration | 3000 |
+| `watcher` | File watcher for auto-reparse | — |
 
-## 🏛️ Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        CLI Layer                             │
-│  parse │ info │ query │ analyze │ find-usages │ impact     │
-│  file-context │ routes │ deps │ architecture │ frameworks  │
-│  cross-language │ export │ enrich │ embed │ serve │ watch   │
-│  monitor │ init                                             │
-├─────────────────────────────────────────────────────────────┤
-│                    Pipeline Orchestrator                      │
-│  Phase 1: Discovery    → File scanning with ignore patterns  │
-│  Phase 2: Hashing      → Content-hash for incremental mode   │
-│  Phase 3: Extraction   → Tree-sitter AST parsing (parallel)  │
-│  Phase 4: Resolution   → Cross-file reference resolution (parallel)     │
-│  Phase 5: Frameworks   → Framework pattern detection (parallel)         │
-│  Phase 6: Cross-lang   → PHP route ↔ JS API call matching    │
-│  Phase 6b: Style edges → Component ↔ stylesheet matching     │
-│  Phase 7: Enrichment   → Git metadata + PHPStan types (parallel)        │
-│  Phase 8: Persistence  → SQLite batch upsert                 │
-├─────────────────────────────────────────────────────────────┤
-│                    Plugin System                              │
-│  ┌──────────┐  ┌──────────────┐  ┌────────────────┐         │
-│  │   PHP    │  │  JavaScript  │  │   TypeScript   │         │
-│  │ Extractor│  │  Extractor   │  │   Extractor    │         │
-│  │ Resolver │  │  Resolver    │  │   Resolver     │         │
-│  │ Laravel  │  │  React       │  │   Angular      │         │
-│  │ Symfony  │  │  Express     │  │                │         │
-│  │          │  │  Next.js     │  │                │         │
-│  │          │  │  Vue         │  │                │         │
-│  ├──────────┤  ├──────────────┤  ├────────────────┤         │
-│  │  Python  │  │     CSS      │  │     SCSS       │         │
-│  │ Extractor│  │  Extractor   │  │   Extractor    │         │
-│  │ Resolver │  │  Resolver    │  │   Resolver     │         │
-│  │ Django   │  │  Tailwind    │  │                │         │
-│  │ Flask    │  │              │  │                │         │
-│  │ FastAPI  │  │              │  │                │         │
-│  └──────────┘  └──────────────┘  └────────────────┘         │
-├─────────────────────────────────────────────────────────────┤
-│                    Storage & Analysis                         │
-│  SQLite + FTS5 + WAL  │  NetworkX Graph  │  Context Assembly │
-├─────────────────────────────────────────────────────────────┤
-│                    MCP Server (FastMCP)                       │
-│  8 Tools  │  3 Resources  │  Hot-reload  │  Token Budgeting  │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### Core Components
-
-| Component | Description | Lines |
-|-----------|-------------|-------|
-| `core/models.py` | 41 node types, 50 edge types, data models | ~500 |
-| `core/config.py` | YAML configuration system | ~350 |
-| `core/registry.py` | Plugin ABCs and registry | ~200 |
-| `plugins/php/` | PHP extractor, resolver, Laravel & Symfony detectors | ~1,500 |
-| `plugins/javascript/` | JS extractor, resolver, React/Express/Next.js/Vue | ~2,500 |
-| `plugins/typescript/` | TS extractor with interfaces, generics, Angular detector | ~2,800 |
-| `plugins/python/` | Python extractor, resolver, Django/Flask/FastAPI detectors | ~2,000 |
-| `plugins/css/` | CSS extractor, resolver, Tailwind detector | ~1,500 |
-| `plugins/scss/` | SCSS extractor, resolver (variables, mixins, functions) | ~1,900 |
-| `pipeline/` | 8-phase orchestrator, scanner, resolver, style edge matcher | ~2,100 |
-| `storage/sqlite_store.py` | SQLite backend with FTS5 and WAL mode | ~800 |
-| `analysis/` | NetworkX graph algorithms | ~500 |
-| `mcp/` | MCP server, tools, resources | ~1,200 |
-| `export/` | Multi-format graph exporter | ~600 |
-| `enrichment/` | Git metadata, PHPStan integration | ~700 |
-| `cli/` | Click-based CLI with Rich output | ~1,000 |
-
----
-
-## 🔌 Plugin Development
-
-CodeRAG uses a plugin architecture for language support. Each plugin implements:
-
-```python
-from coderag.core.registry import LanguagePlugin, ASTExtractor, ModuleResolver
-
-class MyPlugin(LanguagePlugin):
-    def get_language_id(self) -> Language:
-        return Language.MY_LANG
-
-    def get_file_extensions(self) -> list[str]:
-        return [".ext"]
-
-    def create_extractor(self) -> ASTExtractor:
-        return MyExtractor()
-
-    def create_resolver(self) -> ModuleResolver:
-        return MyResolver()
-
-    def get_framework_detectors(self) -> list[FrameworkDetector]:
-        return [MyFrameworkDetector()]
-```
-
-The extractor receives file content and returns an `ExtractionResult` with nodes and edges:
-
-```python
-class MyExtractor(ASTExtractor):
-    def extract(self, file_path: Path, source: bytes) -> ExtractionResult:
-        # Parse AST, create Node and Edge objects
-        nodes = [...]
-        edges = [...]
-        return ExtractionResult(nodes=nodes, edges=edges)
-```
+See [docs/docker.md](docs/docker.md) for full Docker documentation.
 
 ---
 
 ## 📊 Performance Benchmarks
 
-### Single-Language Repositories
+### Automated Benchmarks (51 repositories)
 
-| Language | Repos | Files | Nodes | Edges | Avg Parse Time |
-|----------|-------|-------|-------|-------|----------------|
-| PHP | 10 | 34,891 | 516,478 | 1,058,929 | ~45s |
-| JavaScript | 8 | 24,321 | 176,095 | 531,145 | ~30s |
-| TypeScript | 7 | 24,321 | 176,096 | 531,146 | ~35s |
-| Python | 10 | 5,968 | 206,563 | 448,830 | ~13s |
+| Category | Repos | Files | Nodes | Edges |
+|----------|-------|-------|-------|-------|
+| PHP | 10 | 33,896 | 516,705 | 1,359,239 |
+| JavaScript | 8 | 12,093 | 119,811 | 219,490 |
+| TypeScript | 7 | 37,544 | 232,153 | 542,491 |
+| Python | 10 | 5,968 | 206,563 | 448,830 |
+| Mixed (PHP+JS/TS) | 4 | 8,212 | 81,178 | 185,371 |
+| CSS/SCSS/Tailwind | 12 | 14,096 | 142,387 | 406,729 |
+| **Total** | **51** | **111,809** | **~1,298,797** | **~3,162,150** |
 
-### Mixed-Language Repositories
+### Real-World Dogfood Sessions (7 sessions)
 
-| Repository | Files | Nodes | Edges | Languages | Frameworks |
-|------------|-------|-------|-------|-----------|------------|
-| koel | 1,536 | 30,474 | 62,097 | PHP, JS, TS | Laravel |
-| monica | 2,847 | 15,333 | 30,925 | PHP, JS | Laravel |
-| flarum | 1,982 | 18,204 | 45,178 | PHP, JS, TS | — |
-| bagisto | 1,847 | 17,167 | 47,171 | PHP, JS | Laravel |
+| Session | Project | Type | Files | Nodes | Edges | Bugs Fixed |
+|---------|---------|------|-------|-------|-------|------------|
+| 1 | koel | PHP + Vue | 1,592 | 13,384 | 36,709 | 2 |
+| 2 | paperless-ngx | Django + Angular | 807 | 20,580 | 50,517 | 0 |
+| 3 | saleor | Django + GraphQL | 4,220 | 111,076 | 260,654 | 3 |
+| 4 | NocoDB | TypeScript + Vue | 1,823 | 24,367 | 74,284 | 4 |
+| 5 | Cal.com | TS + React + Tailwind | 7,530 | 50,926 | 220,752 | 4 |
+| 6 | koel (MCP) | MCP + Claude Code | — | 15,797 | 34,294 | 1 |
+| 7 | Mealie | FastAPI + Vue | 1,008 | 18,895 | 53,380 | 2 |
+| **Total** | | | **16,980** | **255,025** | **730,590** | **17** |
 
-### CSS / SCSS / Tailwind Repositories
+### Token Cost Savings
 
-| Project | Type | Files | Nodes | Edges | Time (s) | Queries |
-|---------|------|-------|-------|-------|----------|---------|
-| normalize.css | CSS | 1 | 1 | 0 | 0.4 | 0/3 |
-| animate.css | CSS | 117 | 1,424 | 1,933 | 1.6 | 3/3 |
-| pure-css | CSS | 57 | 1,171 | 2,368 | 1.1 | 3/3 |
-| Bootstrap | SCSS | 281 | 20,854 | 35,094 | 27.3 | 3/3 |
-| Bulma | SCSS | 236 | 11,267 | 15,503 | 21.4 | 3/3 |
-| Foundation | SCSS | 301 | 18,040 | 33,519 | 11.6 | 3/3 |
-| Tailwind Landing | Tailwind | 26 | 195 | 313 | 0.6 | 3/3 |
-| Flowbite | Tailwind | 77 | 3,108 | 4,481 | 2.0 | 3/3 |
-| DaisyUI | Tailwind | 246 | 2,615 | 5,201 | 3.5 | 3/3 |
-| Excalidraw | Mixed | 714 | 8,379 | 24,931 | 10.9 | 3/3 |
-| Cal.com | Mixed | 7,488 | 53,762 | 165,642 | 180.1 | 3/3 |
-| Shadcn/ui | Mixed | 4,552 | 21,571 | 117,744 | 111.0 | 3/3 |
-| **Totals** | | **14,096** | **142,387** | **406,729** | **384.2** | **33/36** |
-
-> 17 distinct style-specific edge types detected across all styling benchmarks. Full report: [docs/benchmark-styling.md](docs/benchmark-styling.md)
-
-### Combined Totals
-
-| Metric | Value |
-|--------|-------|
-| **Repositories benchmarked** | 51 |
-| **Total files parsed** | 111,809 |
-| **Total nodes extracted** | ~1,298,797 |
-| **Total edges created** | ~3,162,150 |
-| **Query accuracy** | 91.7–100% |
-| **Cross-language edges** | Detected in all mixed repos |
-| **Style-specific edge types** | 17 |
-
-### Performance Targets
-
-| Codebase Size | Initial Parse | Incremental Update |
-|---------------|---------------|--------------------|
-| Small (<100 files) | <5s | <0.5s |
-| Medium (100–1,000 files) | 15–60s | <2s |
-| Large (1,000–10,000 files) | 60–300s | <5s |
-| Very Large (10,000+ files) | 5–15min | <10s |
+| Metric | Without CodeRAG | With CodeRAG | Savings |
+|--------|----------------|--------------|--------|
+| Avg tokens/task | 17,617 | 2,400 | **86.4%** |
+| Monthly cost (Claude Sonnet) | $42.28 | $5.76 | **$36.52** |
 
 ---
 
 ## 🧪 Testing
 
+- **4,563 tests** passing
+- **94% code coverage** on critical modules (67% overall)
+- **18 E2E integration tests** (full workflow validation)
+- CI/CD via GitHub Actions — Python 3.11, 3.12, 3.13
+
 ```bash
-# Run all tests
-python -m pytest tests/ -v
+# Run tests
+python -m pytest tests/ -q
 
 # Run with coverage
-python -m pytest tests/ --cov=coderag --cov-report=term-missing
+python -m pytest tests/ --cov=src/coderag --cov-report=term-missing
 
-# Run specific test file
-python -m pytest tests/test_enrichment.py -v
+# Run E2E tests
+bash tests/e2e/test_full_workflow.sh
 ```
-
-**Test suite:** 1,308 tests across 10 test files covering models, config, storage, pipeline, export, hot-reload, framework detection, PHPStan enrichment, and CSS/SCSS parsing.
 
 ---
 
-## 📊 Codebase Stats
+## 📈 Codebase Stats
 
 | Metric | Value |
 |--------|-------|
-| **Total lines of code** | 32,200+ |
-| **Python source files** | 75+ |
-| **Test files** | 10 |
-| **Tests passing** | 1,308 |
-| **Language plugins** | 6 (PHP, JS, TS, Python, CSS, SCSS) |
-| **Framework detectors** | 11 (Laravel, Symfony, React, Express, Next.js, Vue, Angular, Django, Flask, FastAPI, Tailwind CSS) |
-| **MCP tools** | 8 |
-| **MCP resources** | 3 |
-| **Node types** | 41 |
-| **Edge types** | 50 |
+| Python source files | 120 |
+| Total source lines | 43,312 |
+| Test files | 139 |
+| Total test lines | 59,235 |
+| Tests passing | 4,563 |
+| Language plugins | 6 (PHP, JS, TS, Python, CSS, SCSS) + Vue SFC |
+| Framework detectors | 11 |
+| MCP tools | 16 |
+| MCP resources | 3 |
+| Node types | 41 |
+| Edge types | 50 |
+| CLI commands | 25 |
+
+---
+
+## 📚 Documentation
+
+| Guide | Description |
+|-------|-------------|
+| [Quick Start](docs/quickstart.md) | Installation and first steps |
+| [Smart Launcher](docs/launcher.md) | One-command AI session setup |
+| [Session Memory](docs/session-memory.md) | Cross-session context persistence |
+| [Cost Savings](docs/cost-savings.md) | Token cost benchmarking |
+| [AI Tool Setup](docs/ai-tool-setup.md) | Claude Code, Cursor, Codex configuration |
+| [Docker](docs/docker.md) | Container deployment |
+| [Architecture](docs/architecture/) | System design |
+| [Research](docs/research/) | Language parsing research |
 
 ---
 
 ## 🤝 Contributing
 
-Contributions are welcome! Here\'s how to get started:
+Contributions are welcome! Please:
 
-```bash
-# Clone and set up development environment
-git clone https://github.com/dmnkhorvath/coderag.git
-cd coderag
-python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
-
-# Run tests
-python -m pytest tests/ -v
-
-# Run linter
-ruff check src/
-
-# Run type checker
-mypy src/coderag/
-```
-
-### Areas for Contribution
-- 🌐 New language plugins (Go, Rust, Java, C#)
-- 🏗️ Additional framework detectors (NestJS, Svelte, Nuxt)
-- 📊 New graph analysis algorithms
-- 🧪 Additional test coverage
-- 📖 Documentation improvements
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Write tests for your changes
+4. Ensure all tests pass (`python -m pytest tests/ -q`)
+5. Run linting (`ruff check src/ tests/ && ruff format src/ tests/`)
+6. Submit a pull request
 
 ---
 
 ## 📄 License
 
-MIT License — see [LICENSE](LICENSE) for details.
-
----
-
-<div align="center">
-
-**Built with ❤️ using [Tree-sitter](https://tree-sitter.github.io/tree-sitter/), [NetworkX](https://networkx.org/), and [FastMCP](https://github.com/jlowin/fastmcp)**
-
-</div>
+MIT — see [LICENSE](LICENSE) for details.
