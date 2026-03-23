@@ -10,8 +10,10 @@ implements clauses, type annotations, and generics.
 from __future__ import annotations
 
 import logging
+import re
 import time
-from dataclasses import dataclass, field, replace as _dc_replace
+from dataclasses import dataclass, field
+from dataclasses import replace as _dc_replace
 from typing import Any
 
 import tree_sitter
@@ -408,18 +410,93 @@ class TypeScriptExtractor(ASTExtractor):
 
     def _parser_for(self, file_path: str) -> tree_sitter.Parser:
         self._ensure_parsers()
-        if file_path.endswith(".tsx"):
+        if file_path.endswith((".tsx", ".vue")):
             assert self._parser_tsx is not None
             return self._parser_tsx
         assert self._parser_ts is not None
         return self._parser_ts
+
+    # -- Vue SFC helpers ----------------------------------------------------
+
+    _VUE_SCRIPT_RE = re.compile(
+        r"<script(?P<attrs>[^>]*)>(?P<body>.*?)</script>",
+        re.DOTALL,
+    )
+
+    @staticmethod
+    def _extract_vue_script(source: bytes) -> tuple[bytes, int]:
+        """Extract the <script> block from a Vue Single File Component.
+
+        Returns:
+            Tuple of (script_content_bytes, line_offset) where line_offset
+            is the 0-based line number of the first line of script content
+            within the original .vue file.  If no <script> block is found,
+            returns (b"", 0).
+        """
+        text = source.decode("utf-8", errors="replace")
+        best_match: re.Match[str] | None = None
+        best_priority = -1
+
+        for m in TypeScriptExtractor._VUE_SCRIPT_RE.finditer(text):
+            attrs = m.group("attrs")
+            # Skip <script> blocks that are clearly non-JS/TS (e.g. JSON)
+            if "application/json" in attrs or "application/ld+json" in attrs:
+                continue
+            # Prioritise: lang="ts" > setup > plain <script>
+            priority = 0
+            if 'lang="ts"' in attrs or "lang='ts'" in attrs or "lang=ts" in attrs:
+                priority += 2
+            if "setup" in attrs:
+                priority += 1
+            if best_match is None or priority > best_priority:
+                best_match = m
+                best_priority = priority
+
+        if best_match is None:
+            return b"", 0
+
+        body = best_match.group("body")
+        # Calculate line offset: count newlines before the script body starts
+        script_body_start = best_match.start("body")
+        line_offset = text[:script_body_start].count("\n")
+
+        return body.encode("utf-8"), line_offset
 
     # -- ASTExtractor interface ---------------------------------------------
 
     def extract(self, file_path: str, source: bytes) -> ExtractionResult:
         """Parse *source* and extract all nodes / edges."""
         t0 = time.perf_counter()
-        ctx = _ExtractionContext(file_path=file_path, source=source)
+
+        # Vue SFC handling: extract <script> block and track line offset
+        vue_line_offset = 0
+        parse_source = source
+        if file_path.endswith(".vue"):
+            script_content, vue_line_offset = self._extract_vue_script(source)
+            if not script_content.strip():
+                # No <script> block found — return empty result
+                elapsed = (time.perf_counter() - t0) * 1000
+                return ExtractionResult(
+                    file_path=file_path,
+                    language="typescript",
+                    nodes=[
+                        Node(
+                            id=generate_node_id(file_path, 1, NodeKind.FILE, file_path),
+                            kind=NodeKind.FILE,
+                            name=file_path.rsplit("/", 1)[-1],
+                            qualified_name=file_path,
+                            file_path=file_path,
+                            start_line=1,
+                            end_line=source.count(b"\n") + 1,
+                            language="typescript",
+                            content_hash=compute_content_hash(source),
+                        )
+                    ],
+                    parse_time_ms=elapsed,
+                )
+            parse_source = script_content
+
+        ctx = _ExtractionContext(file_path=file_path, source=parse_source)
         ctx.scope_stack.append(file_path)
 
         # Create FILE node
@@ -432,22 +509,59 @@ class TypeScriptExtractor(ASTExtractor):
             start_line=1,
             end_line=0,  # filled below
             language="typescript",
-            content_hash=compute_content_hash(source),
+            content_hash=compute_content_hash(source),  # hash of full .vue file
         )
 
         parser = self._parser_for(file_path)
-        tree = parser.parse(source)
+        tree = parser.parse(parse_source)
         root = tree.root_node
 
         if root.has_error:
             ctx.add_error("Tree-sitter reported parse errors", line=1)
 
-
-        file_node = _dc_replace(file_node, end_line=root.end_point[0] + 1)
+        if vue_line_offset:
+            # For .vue files, end_line is the full file length
+            file_node = _dc_replace(
+                file_node,
+                end_line=source.count(b"\n") + 1,
+            )
+        else:
+            file_node = _dc_replace(file_node, end_line=root.end_point[0] + 1)
         ctx.add_node(file_node)
 
         # Walk top-level statements
         self._visit_children(root, ctx)
+
+        # Adjust line numbers for Vue SFC offset
+        if vue_line_offset:
+            adjusted_nodes: list[Node] = []
+            for n in ctx.nodes:
+                if n.kind == NodeKind.FILE:
+                    adjusted_nodes.append(n)
+                else:
+                    adjusted_nodes.append(
+                        _dc_replace(
+                            n,
+                            start_line=n.start_line + vue_line_offset,
+                            end_line=n.end_line + vue_line_offset,
+                        )
+                    )
+            ctx.nodes = adjusted_nodes
+
+            adjusted_edges: list[Edge] = []
+            for e in ctx.edges:
+                if e.line_number is not None:
+                    adjusted_edges.append(_dc_replace(e, line_number=e.line_number + vue_line_offset))
+                else:
+                    adjusted_edges.append(e)
+            ctx.edges = adjusted_edges
+
+            for i, ref in enumerate(ctx.unresolved):
+                ctx.unresolved[i] = _dc_replace(ref, line_number=ref.line_number + vue_line_offset)
+
+            for i, err in enumerate(ctx.errors):
+                if err.line_number is not None:
+                    ctx.errors[i] = _dc_replace(err, line_number=err.line_number + vue_line_offset)
 
         elapsed = (time.perf_counter() - t0) * 1000
         return ExtractionResult(

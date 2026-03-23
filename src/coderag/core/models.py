@@ -676,6 +676,7 @@ def detect_language(file_path: str) -> str | None:
         ".tsx": "typescript",
         ".mts": "typescript",
         ".cts": "typescript",
+        ".vue": "typescript",
     }
     return mapping.get(ext)
 

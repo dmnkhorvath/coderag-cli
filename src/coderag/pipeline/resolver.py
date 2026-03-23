@@ -131,7 +131,7 @@ class ReferenceResolver:
 
         for result in all_results:
             for ref in result.unresolved_references:
-                edge, placeholder = self._resolve_one(ref, seen_placeholders)
+                edge, placeholder = self._resolve_one(ref, seen_placeholders, result.language)
                 if edge is not None:
                     resolved_edges.append(edge)
                     if edge.confidence >= self.SUFFIX_MATCH_CONFIDENCE:
@@ -153,6 +153,7 @@ class ReferenceResolver:
         self,
         ref: UnresolvedReference,
         seen_placeholders: set[str],
+        source_language: str = "unknown",
     ) -> tuple[Edge | None, Node | None]:
         """Try to resolve a single reference using indexed lookups."""
         target_name = ref.reference_name.strip("\\")
@@ -216,7 +217,7 @@ class ReferenceResolver:
                 file_path="<external>",
                 start_line=0,
                 end_line=0,
-                language="php",
+                language=source_language,
                 metadata={"external": True, "placeholder": True},
             )
 

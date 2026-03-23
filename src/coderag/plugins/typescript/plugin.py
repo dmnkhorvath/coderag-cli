@@ -37,7 +37,7 @@ class TypeScriptPlugin(LanguagePlugin):
 
     @property
     def file_extensions(self) -> frozenset[str]:
-        return frozenset({".ts", ".tsx", ".mts", ".cts"})
+        return frozenset({".ts", ".tsx", ".mts", ".cts", ".vue"})
 
     # -- Lifecycle ----------------------------------------------------------
 
