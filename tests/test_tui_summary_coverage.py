@@ -10,7 +10,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-pytestmark = pytest.mark.skip(reason="Textual TUI coverage tests rely on interactive internals and are unsupported in headless CI")
+pytestmark = pytest.mark.skip(
+    reason="Textual TUI coverage tests rely on interactive internals and are unsupported in headless CI"
+)
 
 
 class TestSummaryScreenCompose:

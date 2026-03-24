@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "coderag-cli"
-version = "0.1.0"
+version = "0.2.0"
 description = "Build knowledge graphs from your codebase for LLM context retrieval — supports PHP, JavaScript, and TypeScript with framework detection and MCP server integration."
 readme = "README.md"
 requires-python = ">=3.11"
